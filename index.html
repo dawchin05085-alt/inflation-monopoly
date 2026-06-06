@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>通膨閃電大富翁 · Inflation & Blitz Monopoly</title>
+  <title>DC大富翁 · DC Monopoly</title>
   <!-- 引入 Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- 引入 PeerJS WebRTC P2P 連線庫 -->
@@ -22,7 +22,7 @@
     <div class="card pop scroll" style="max-width: 860px; width: 100%; padding: 26px; max-height: 94vh; overflow: auto;">
       <div class="flex items-center justify-between border-b border-[#26314a] pb-3 mb-4 flex-wrap gap-2">
         <div class="flex items-center gap-3">
-          <div class="display text-3xl font-bold text-[#f5c451]">通膨閃電大富翁</div>
+          <div class="display text-3xl font-bold text-[#f5c451]">DC大富翁</div>
           <span class="chip mono text-[#34d399] border-[#34d399]">BLITZ · WEBRTC ONLINE</span>
         </div>
         <span class="text-xs text-[#8a98b3]">P2P 多人線上連線對戰版 · 免伺服器架構</span>
@@ -171,7 +171,7 @@
     <!-- 頂部狀態列 -->
     <div class="absolute left-0 right-0 top-0 z-30 flex items-center justify-between" style="padding: 10px 14px; gap: 12px; pointer-events: none;">
       <div class="card flex items-center gap-3" style="padding: 8px 14px; pointer-events: auto;">
-        <div class="display font-bold text-[#f5c451]">通膨閃電大富翁</div>
+        <div class="display font-bold text-[#f5c451]">DC大富翁</div>
         <span class="chip mono" id="roundChip">第 1 輪</span>
         <span class="chip mono text-[#f87171]" id="infChip">×1.00</span>
       </div>
@@ -190,6 +190,23 @@
         </div>
       </div>
     </div>
+
+    <!-- 左側玩家狀態面板 (常開但可最小化) -->
+    <div id="leftSidebar" class="absolute left-3 top-[84px] z-30 card flex flex-col transition-all duration-300" style="width: 280px; max-height: calc(100vh - 240px); box-shadow: 0 4px 20px rgba(0,0,0,0.5); overflow: hidden;">
+      <div class="flex items-center justify-between border-b border-[#26314a] p-3 bg-[#121826] shrink-0">
+        <span class="display font-bold text-sm text-[#f5c451]">👥 玩家即時狀態</span>
+        <button class="text-xs text-[#8a98b3] hover:text-[#e6edf7] font-bold" onclick="toggleSidebar()">
+          <span id="sidebarToggleArrow">◀ 收合</span>
+        </button>
+      </div>
+      <div id="sidebarContent" class="p-3 flex-1 overflow-y-auto scroll flex flex-col gap-2.5">
+        <!-- 動態載入玩家簡短狀態 -->
+      </div>
+    </div>
+    <!-- 當 sidebar 最小化時的迷你懸浮按鈕 -->
+    <button id="sidebarExpandBtn" class="absolute left-3 top-[84px] z-30 btn btn-gold px-3 py-2 text-xs hidden" onclick="toggleSidebar()">
+      ▶ 展開狀態列
+    </button>
 
     <!-- 地圖視口 (Viewport) -->
     <div id="mapViewport">
