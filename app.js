@@ -140,6 +140,16 @@ function log(msg, color) {
 }
 
 function renderLogs() {
+  // 更新常駐事件跑馬燈（最新一筆），讓所有人即時看到最新動作
+  const ticker = $('eventTicker');
+  if (ticker && state && state.logHistory && state.logHistory.length) {
+    const last = state.logHistory[state.logHistory.length - 1];
+    ticker.innerHTML = `📢 <span style="color:${last.color || 'var(--gold)'}">${last.msg}</span>`;
+    ticker.style.opacity = '1';
+  } else if (ticker) {
+    ticker.style.opacity = '0';
+  }
+
   const container = $('log');
   if (!container) return;
   container.innerHTML = '';
@@ -314,80 +324,95 @@ function addEdge(a, b) {
 
 function buildMap() {
   MAP = { nodes: [], adj: {} };
-  const rect = { x: 150, y: 150, w: 2100, h: 1100 };
-  const N = 38; 
-  for (let i = 0; i < N; i++) {
-    const p = ptOnRect(i / N, rect);
-    let x = p.x, y = p.y;
-    if (i === 6) { x = 1200; y = 150; }
-    if (i === 25) { x = 1200; y = 1250; }
-    if (i === 15) { x = 2250; y = 700; }
-    if (i === 34) { x = 150; y = 700; }
-    MAP.nodes.push({ id: i, x, y });
+  // 拉大矩形，讓外環節點不再擠在一起
+  const rect = { x: 460, y: 460, w: 3800, h: 2500 };
+  const R = 38;
+  for (let i = 0; i < R; i++) {
+    const pt = ptOnRect(i / R, rect);
+    MAP.nodes.push({ id: i, x: pt.x, y: pt.y, kind: 'ring', ringNext: (i + 1) % R });
   }
-  for (let i = 0; i < N; i++) addEdge(i, (i + 1) % N);
-  
-  const cx = 1200, cy = 700;
-  MAP.nodes.push({ id: 40, x: cx, y: cy });
-  
-  const vBridge = [
-    { id: 38, x: cx, y: 330 },
-    { id: 39, x: cx, y: 510 },
-    { id: 41, x: cx, y: 880 },
-    { id: 42, x: cx, y: 1060 }
-  ];
-  MAP.nodes.push(...vBridge);
-  addEdge(6, 38);
-  addEdge(38, 39);
-  addEdge(39, 40);
-  addEdge(40, 41);
-  addEdge(41, 42);
-  addEdge(42, 25);
-  
-  const hBridge = [
-    { id: 43, x: 500, y: cy },
-    { id: 44, x: 850, y: cy },
-    { id: 45, x: 1550, y: cy },
-    { id: 46, x: 1900, y: cy }
-  ];
-  MAP.nodes.push(...hBridge);
-  addEdge(34, 43);
-  addEdge(43, 44);
-  addEdge(44, 40);
-  addEdge(40, 45);
-  addEdge(45, 46);
-  addEdge(46, 15);
-  
-  MAP.nodes.push({ id: 47, x: 2450, y: 150 });
-  MAP.nodes.push({ id: 48, x: 2450, y: 350 });
-  addEdge(10, 47); addEdge(47, 48); addEdge(48, 12);
-  
-  MAP.nodes.push({ id: 49, x: 2450, y: 1050 });
-  MAP.nodes.push({ id: 50, x: 2450, y: 1250 });
-  addEdge(18, 49); addEdge(49, 50); addEdge(50, 20);
-  
-  MAP.nodes.push({ id: 51, x: -50, y: 1250 });
-  MAP.nodes.push({ id: 52, x: -50, y: 1050 });
-  addEdge(28, 51); addEdge(51, 52); addEdge(52, 30);
-  
-  MAP.nodes.push({ id: 53, x: -50, y: 350 });
-  MAP.nodes.push({ id: 54, x: -50, y: 150 });
-  addEdge(36, 53); addEdge(53, 54); addEdge(54, 0);
+  for (let i = 0; i < R; i++) addEdge(i, (i + 1) % R);
 
+  const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+  // 中央賭場
+  MAP.nodes.push({ id: 40, x: cx, y: cy, kind: 'bridge' });
+
+  let nid = 41; // 新分支節點起始 id
+  // 直線路鏈：a —(count 個中繼節點)— b
+  function chain(aId, bId, count, kind) {
+    const a = nodeById(aId), b = nodeById(bId);
+    const ids = [];
+    for (let k = 1; k <= count; k++) {
+      const t = k / (count + 1);
+      const id = nid++;
+      MAP.nodes.push({ id, x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, kind });
+      ids.push(id);
+    }
+    let prev = aId;
+    ids.forEach(id => { addEdge(prev, id); prev = id; });
+    addEdge(prev, bId);
+    return ids;
+  }
+  // 弧形路鏈：a → 向外凸的頂點 → b（沿弧長等分取樣，節點分佈均勻）
+  function chainArc(aId, bId, count, kind, bulge) {
+    const a = nodeById(aId), b = nodeById(bId);
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    let nx = mx - cx, ny = my - cy; const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl;
+    const ax = mx + nx * bulge, ay = my + ny * bulge; // 弧頂
+    const bez = t => { const u = 1 - t; return { x: u * u * a.x + 2 * u * t * ax + t * t * b.x, y: u * u * a.y + 2 * u * t * ay + t * t * b.y }; };
+    const S = 240; const len = [0]; let prev = bez(0);
+    for (let i = 1; i <= S; i++) { const q = bez(i / S); len.push(len[i - 1] + Math.hypot(q.x - prev.x, q.y - prev.y)); prev = q; }
+    const total = len[S];
+    const ids = [];
+    for (let k = 1; k <= count; k++) {
+      const target = total * k / (count + 1);
+      let i = 1; while (i <= S && len[i] < target) i++;
+      const q = bez(i / S);
+      const id = nid++;
+      MAP.nodes.push({ id, x: q.x, y: q.y, kind });
+      ids.push(id);
+    }
+    let prev2 = aId;
+    ids.forEach(id => { addEdge(prev2, id); prev2 = id; });
+    addEdge(prev2, bId);
+    return ids;
+  }
+
+  // 中央十字長橋（皆經過賭場 40），每段 3 個中繼節點 → 比原本更長
+  const brN = chain(6, 40, 3, 'bridge');
+  const brS = chain(40, 25, 3, 'bridge');
+  const brW = chain(34, 40, 3, 'bridge');
+  const brE = chain(40, 15, 3, 'bridge');
+  // 四條外圍長繞道，沿弧線大幅向外凸出 → 又長又不擠
+  const dNE = chainArc(10, 12, 3, 'detour', 2600);
+  const dSE = chainArc(18, 20, 3, 'detour', 2600);
+  const dSW = chainArc(28, 30, 3, 'detour', 2600);
+  const dNW = chainArc(36, 0, 3, 'detour', 2600);
+
+  // 外環特殊格（皆為 id < 38）
   const spec = {
     0: 'start', 2: 'fate', 4: 'news', 6: 'plaza', 8: 'shop', 10: 'plaza',
     11: 'bank', 12: 'plaza', 13: 'jail', 14: 'stock', 15: 'plaza', 17: 'fate',
     18: 'plaza', 19: 'news', 20: 'plaza', 22: 'shop', 23: 'bank', 25: 'plaza',
     27: 'stock', 28: 'plaza', 30: 'plaza', 32: 'shop', 34: 'plaza', 36: 'plaza',
-    37: 'stock',
-    40: 'casino',
-    47: 'fate', 51: 'fate',
-    49: 'news', 53: 'news',
-    48: 'shop', 52: 'shop',
-    50: 'stock', 54: 'stock'
+    37: 'stock'
   };
-  const forks = new Set([6, 10, 15, 18, 25, 28, 34, 36, 40]);
-  
+  const forks = new Set([6, 10, 15, 18, 25, 28, 34, 36]);
+
+  // 分支（橋／繞道）節點輪流給予事件/商店/股市型別，讓長路線有誘因
+  const branchCycle = ['fate', 'shop', 'news', 'stock'];
+  let bt = 0;
+  [...brN, ...brS, ...brW, ...brE, ...dNE, ...dSE, ...dSW, ...dNW].forEach(id => {
+    const n = nodeById(id);
+    const t = branchCycle[bt % branchCycle.length]; bt++;
+    n.type = t;
+    n.name = { fate: '命運', news: '新聞快報', shop: '道具商店', stock: '證券交易所' }[t];
+  });
+  // 賭場型別
+  const casino = nodeById(40);
+  casino.type = 'casino';
+  casino.name = '拉斯維加斯賭場';
+
   const GROUPS = [
     { name: '老城商圈', color: '#a16207', size: 3 },
     { name: '濱海特區', color: '#0e7490', size: 3 },
@@ -398,17 +423,17 @@ function buildMap() {
     { name: '頂級地段', color: '#7c3aed', size: 4 },
     { name: '新興開發', color: '#0f766e', size: 3 },
   ];
-  
+
   let pIdx = 0, grpIdx = 0, grpLeft = GROUPS[0].size;
   MAP.nodes.forEach(n => {
+    if (n.type) return; // 分支/賭場已設定型別 → 跳過
     if (spec[n.id]) {
       n.type = spec[n.id];
       n.name = {
         start: '起點', fate: '命運', news: '新聞快報', shop: '道具商店',
-        stock: '證券交易所', bank: '中央銀行', jail: '監獄/休息', casino: '拉斯維加斯賭場'
+        stock: '證券交易所', bank: '中央銀行', jail: '監獄/休息'
       }[spec[n.id]];
       if (forks.has(n.id)) n.name = '轉運廣場';
-      if (n.id === 40) n.name = '拉斯維加斯賭場';
       return;
     }
     n.type = 'property';
@@ -418,7 +443,7 @@ function buildMap() {
     n.owner = null;
     n.level = 0;
     n.lastActionRound = 0;
-    
+
     if (grpLeft <= 0) {
       grpIdx = (grpIdx + 1) % GROUPS.length;
       grpLeft = GROUPS[grpIdx].size;
@@ -429,7 +454,7 @@ function buildMap() {
     grpLeft--;
     pIdx++;
   });
-  
+
   bbox = { minX: 1e9, minY: 1e9, maxX: -1e9, maxY: -1e9 };
   MAP.nodes.forEach(n => {
     bbox.minX = Math.min(bbox.minX, n.x);
@@ -446,62 +471,28 @@ function nodeById(id) {
 /* =========================================================
    自動尋路預設方向
 ========================================================= */
+// 取得「不回頭」的前進選項（排除剛剛來的那一格）
+function neighborsForward(cur, from) {
+  let opts = (MAP.adj[cur] || []).filter(n => n !== from);
+  if (opts.length === 0) opts = (MAP.adj[cur] || []).slice();
+  return opts;
+}
+// 自動／觀戰用的決定性預設方向：盡量沿外環主幹道前進
 function getNextNode(cur, from) {
-  if (cur === 6) {
-    return from === 7 ? 38 : 7;
-  }
-  if (cur === 10) {
-    return from === 11 ? 47 : 11;
-  }
-  if (cur === 15) {
-    return from === 16 ? 46 : 16;
-  }
-  if (cur === 18) {
-    return from === 19 ? 49 : 19;
-  }
-  if (cur === 25) {
-    return from === 26 ? 42 : 26;
-  }
-  if (cur === 28) {
-    return from === 29 ? 51 : 29;
-  }
-  if (cur === 34) {
-    return from === 35 ? 43 : 35;
-  }
-  if (cur === 36) {
-    return from === 37 ? 53 : 0;
-  }
-
-  if (cur < 38) {
-    return (cur + 1) % 38;
-  }
-  if (cur === 47) return from === 10 ? 48 : 10;
-  if (cur === 48) return from === 47 ? 12 : 47;
-  if (cur === 49) return from === 18 ? 50 : 18;
-  if (cur === 50) return from === 49 ? 20 : 49;
-  if (cur === 51) return from === 28 ? 52 : 28;
-  if (cur === 52) return from === 51 ? 30 : 51;
-  if (cur === 53) return from === 36 ? 54 : 36;
-  if (cur === 54) return from === 53 ? 0 : 53;
-  
-  if (cur === 38) return from === 6 ? 39 : 6;
-  if (cur === 39) return from === 38 ? 40 : 38;
-  if (cur === 40) {
-    if (from === 39) return 41;
-    if (from === 41) return 39;
-    if (from === 44) return 45;
-    if (from === 45) return 44;
-    return 41;
-  }
-  if (cur === 41) return from === 40 ? 42 : 40;
-  if (cur === 42) return from === 41 ? 25 : 41;
-  
-  if (cur === 43) return from === 34 ? 44 : 34;
-  if (cur === 44) return from === 43 ? 40 : 43;
-  if (cur === 45) return from === 40 ? 46 : 40;
-  if (cur === 46) return from === 45 ? 15 : 45;
-  
-  return (cur + 1) % 38;
+  const opts = neighborsForward(cur, from);
+  if (opts.length <= 1) return opts[0];
+  const cn = nodeById(cur);
+  if (cn && cn.ringNext != null && opts.includes(cn.ringNext)) return cn.ringNext;
+  return opts[0];
+}
+// 岔路選項的方向標籤（含方位箭頭與路線種類）
+function routeLabel(cur, id) {
+  const a = nodeById(cur), b = nodeById(id);
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const arrow = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? '➡️' : '⬅️') : (dy > 0 ? '⬇️' : '⬆️');
+  const kindIcon = b.kind === 'bridge' ? '🌉' : (b.kind === 'detour' ? '⛺' : '🧭');
+  const kindText = b.kind === 'bridge' ? '中央捷徑' : (b.kind === 'detour' ? '外圍繞道' : '外環主幹道');
+  return `${arrow} ${kindIcon} ${kindText} → ${b.name}`;
 }
 
 /* =========================================================
@@ -557,6 +548,7 @@ function startGame() {
       from: 37, 
       stocks: {},
       pledged: {},
+      tradeLog: [], // 股票交易紀錄
       items: [pick(Object.keys(ITEMS))],
       deity: null,
       alive: true,
@@ -1241,68 +1233,20 @@ async function beginTurn() {
   startTimer();
 }
 
-async function chooseDirectionAtFork(p) {
-  let opts = [];
-  if (p.node === 6) {
-    opts = [
-      { label: '🧭 順時針外環商圈 (往節點 7)', value: 5, cls: 'btn-gold' },
-      { label: '🌉 縱向捷徑大橋 (往節點 38)', value: 7, cls: 'btn-green' }
-    ];
-  } else if (p.node === 10) {
-    opts = [
-      { label: '🧭 外環主幹道 (往節點 11)', value: 9, cls: 'btn-gold' },
-      { label: '⛺ 東北外圍繞道 (往節點 47)', value: 11, cls: 'btn-green' }
-    ];
-  } else if (p.node === 15) {
-    opts = [
-      { label: '🧭 外環主幹道 (往節點 16)', value: 14, cls: 'btn-gold' },
-      { label: '🌉 橫向捷徑大橋 (往節點 46)', value: 16, cls: 'btn-green' }
-    ];
-  } else if (p.node === 18) {
-    opts = [
-      { label: '🧭 外環主幹道 (往節點 19)', value: 17, cls: 'btn-gold' },
-      { label: '⛺ 東南外圍繞道 (往節點 49)', value: 19, cls: 'btn-green' }
-    ];
-  } else if (p.node === 25) {
-    opts = [
-      { label: '🧭 外環主幹道 (往節點 26)', value: 24, cls: 'btn-gold' },
-      { label: '🌉 縱向捷徑大橋 (往節點 42)', value: 26, cls: 'btn-green' }
-    ];
-  } else if (p.node === 28) {
-    opts = [
-      { label: '🧭 外環主幹道 (往節點 29)', value: 27, cls: 'btn-gold' },
-      { label: '⛺ 西南外圍繞道 (往節點 51)', value: 29, cls: 'btn-green' }
-    ];
-  } else if (p.node === 34) {
-    opts = [
-      { label: '🧭 外環主幹道 (往節點 35)', value: 33, cls: 'btn-gold' },
-      { label: '🌉 橫向捷徑大橋 (往節點 43)', value: 35, cls: 'btn-green' }
-    ];
-  } else if (p.node === 36) {
-    opts = [
-      { label: '🧭 外環主幹道 (往起點)', value: 35, cls: 'btn-gold' },
-      { label: '⛺ 西北外圍繞道 (往節點 53)', value: 37, cls: 'btn-green' }
-    ];
-  } else if (p.node === 40) {
-    opts = [
-      { label: '⬆️ 往北大橋 (往節點 39)', value: 41, cls: 'btn-gold' },
-      { label: '⬇️ 往南大橋 (往節點 41)', value: 39, cls: 'btn-gold' },
-      { label: '➡️ 往東大橋 (往節點 45)', value: 44, cls: 'btn-green' },
-      { label: '⬅️ 往西大橋 (往節點 44)', value: 45, cls: 'btn-green' }
-    ];
-  }
-  
-  if (opts.length > 0) {
-    const val = await showChoice(
-      '🔀 抵達轉運廣場',
-      `<b>${nodeById(p.node).name}</b>：前方出現岔路，請選擇前進方向：`,
-      opts
-    );
-    const chosen = (val !== undefined ? val : opts[0].value);
-    log(`🧭 <b>${p.name}</b> 在轉運廣場選擇了前進路線。`, p.color);
-    return chosen;
-  }
-  return undefined;
+async function chooseDirectionAtFork(p, cur, opts) {
+  if (!opts || opts.length <= 1) return undefined;
+  const buttons = opts.map((id, i) => ({
+    label: routeLabel(cur, id),
+    value: id,
+    cls: nodeById(id).kind === 'ring' ? 'btn-gold' : 'btn-green'
+  }));
+  const val = await showChoice(
+    '🔀 抵達轉運廣場',
+    `<b>${nodeById(cur).name}</b>：前方出現岔路，請選擇前進方向：`,
+    buttons
+  );
+  log(`🧭 <b>${p.name}</b> 在轉運廣場選擇了前進方向。`, p.color);
+  return (val !== undefined ? val : opts[0]); // 直接回傳下一個節點 id
 }
 
 async function doRoll(forced) {
@@ -1349,16 +1293,15 @@ async function doRoll(forced) {
 }
 
 async function walk(p, steps) {
-  const FORK_NODES = new Set([6, 10, 15, 18, 25, 28, 34, 36, 40]);
   const isActing = (playMode === 'local' || (peer && p.peerId === peer.id));
   let from = p.from;
   for (let s = 0; s < steps; s++) {
     let nextId;
-    // 走到轉運廣場（分岔點）時，由行動玩家即時選擇方向
-    if (FORK_NODES.has(p.node) && isActing && !state.auto) {
-      const choiceFrom = await chooseDirectionAtFork(p);
-      if (choiceFrom !== undefined) from = choiceFrom; // 以選擇的方向覆寫面向
-      nextId = getNextNode(p.node, from);
+    const fwd = neighborsForward(p.node, from);
+    // 走到任何有多條前進路線的節點（轉運廣場/賭場）時，由行動玩家即時選擇方向
+    if (fwd.length > 1 && isActing && !state.auto) {
+      const chosen = await chooseDirectionAtFork(p, p.node, fwd);
+      nextId = (chosen !== undefined) ? chosen : getNextNode(p.node, from);
     } else {
       nextId = getNextNode(p.node, from);
     }
@@ -1958,7 +1901,7 @@ function fluctuateStocks() {
     moveStock(s, 1 + drift);
     
     s.hist.push(s.price);
-    if (s.hist.length > 10) s.hist.shift();
+    if (s.hist.length > 30) s.hist.shift();
     
     s.limit = 0;
   });
@@ -2051,6 +1994,11 @@ function renderStock() {
     const pQty = getStockQty(p, s.ticker);
     const pPledge = p.pledged[s.ticker] || { shares: 0, loan: 0 };
     const maxBuy = Math.floor(p.cash / s.price);
+    const pAvg = getStockAvgCost(p, s.ticker);
+    const pnlAmt = pQty > 0 ? Math.round((s.price - pAvg) * pQty) : 0;
+    const pnlPct = (pQty > 0 && pAvg > 0) ? ((s.price - pAvg) / pAvg * 100) : 0;
+    const pnlColorClass = pnlAmt >= 0 ? 'text-[#34d399]' : 'text-[#f87171]';
+    const pnlSign = pnlAmt >= 0 ? '+' : '-';
     
     detailHTML = `
       <div class="flex-1 flex flex-col justify-between">
@@ -2071,6 +2019,14 @@ function renderStock() {
             <div class="mono text-right font-bold ${colorClass}">${diff > 0 ? '+' : ''}${pct}%</div>
             <div class="text-[#8a98b3]">您持有的股份</div>
             <div class="mono text-right font-bold text-[#34d399]">${pQty} 股</div>
+            ${pQty > 0 ? `
+            <div class="text-[#8a98b3]">持倉均價成本</div>
+            <div class="mono text-right font-bold text-[#e6edf7]">$${fmt(pAvg)}</div>
+            <div class="text-[#8a98b3]">未實現損益</div>
+            <div class="mono text-right font-bold ${pnlColorClass}">${pnlSign}$${fmt(Math.abs(pnlAmt))}</div>
+            <div class="text-[#8a98b3]">未實現漲幅</div>
+            <div class="mono text-right font-bold ${pnlColorClass}">${pnlSign}${Math.abs(pnlPct).toFixed(1)}%</div>
+            ` : ''}
             <div class="text-[#8a98b3]">已質押股份</div>
             <div class="mono text-right font-bold text-[#a78bfa]">${pPledge.shares} 股</div>
             <div class="text-[#8a98b3]">質押貸款金額</div>
@@ -2105,6 +2061,41 @@ function renderStock() {
                   </div>`;
                 }).filter(h => h !== '').join('');
                 return holdings || '<div class="text-[#8a98b3] text-[11px] text-center py-2">目前沒有任何玩家持有此股票。</div>';
+              })()}
+            </div>
+          </div>
+
+          <div class="border-t border-[#26314a] pt-2 mt-2">
+            <div class="text-[10px] text-[#8a98b3] font-bold mb-1">📊 近期股價歷史（最新在右）</div>
+            <div class="flex flex-wrap gap-1 max-h-[64px] overflow-y-auto scroll">
+              ${(() => {
+                const h = s.hist || [];
+                const show = h.slice(-14);
+                return show.map((v, i) => {
+                  const prevV = i > 0 ? show[i - 1] : v;
+                  const up = v >= prevV;
+                  return `<span class="mono text-[10px] px-1 py-0.5 rounded ${up ? 'text-[#34d399]' : 'text-[#f87171]'} bg-[#0b0f17]">$${fmt(v)}</span>`;
+                }).join('');
+              })()}
+            </div>
+          </div>
+
+          <div class="border-t border-[#26314a] pt-2 mt-2">
+            <div class="text-[10px] text-[#8a98b3] font-bold mb-1">🧾 我的交易紀錄（${s.name}）</div>
+            <div class="max-h-[96px] overflow-y-auto scroll">
+              ${(() => {
+                const logs = (p.tradeLog || []).filter(t => t.ticker === s.ticker);
+                if (logs.length === 0) return '<div class="text-[#8a98b3] text-[11px] text-center py-2">尚無交易紀錄。</div>';
+                const label = { buy: '📈 買進', sell: '📉 賣出', pledge: '🔒 質押', redeem: '🔓 贖回' };
+                const col = { buy: 'text-[#34d399]', sell: 'text-[#f87171]', pledge: 'text-[#a78bfa]', redeem: 'text-[#60a5fa]' };
+                return logs.slice().reverse().map(t => {
+                  const pnlTxt = (t.type === 'sell' && t.pnl !== undefined)
+                    ? ` <span class="${t.pnl >= 0 ? 'text-[#34d399]' : 'text-[#f87171]'} font-bold">損益${t.pnl >= 0 ? '+' : '-'}$${fmt(Math.abs(Math.round(t.pnl)))}</span>` : '';
+                  return `<div class="flex justify-between items-center text-[11px] py-1 border-b border-[#26314a]/30">
+                    <span class="text-[#8a98b3]">[輪${t.round}] <span class="${col[t.type]} font-bold">${label[t.type]}</span></span>
+                    <span class="mono">${t.qty}股 @ $${fmt(t.price)}${pnlTxt}</span>
+                  </div>`;
+                }).join('');
               })()}
             </div>
           </div>
@@ -2176,6 +2167,8 @@ function tradeStock(type) {
     
     log(`📈 <b>${p.name}</b> 買進了 ${val} 股「${s.name}」（單價 $${fmt(s.price)}）。`, p.color);
     state.turnActions.push(`📈 買進 ${val} 股「${s.name}」（單價 $${fmt(s.price)}）`);
+    if (!p.tradeLog) p.tradeLog = [];
+    p.tradeLog.push({ round: state.round, type: 'buy', ticker: s.ticker, name: s.name, qty: val, price: s.price });
   } 
   else if (type === 'sell') {
     const qty = getStockQty(p, s.ticker);
@@ -2195,6 +2188,8 @@ function tradeStock(type) {
     }
     log(`📉 <b>${p.name}</b> 賣出了 ${val} 股「${s.name}」（單價 $${fmt(s.price)}），變現 $${fmt(earn)}。`, p.color);
     state.turnActions.push(`📉 賣出 ${val} 股「${s.name}」（單價 $${fmt(s.price)}）`);
+    if (!p.tradeLog) p.tradeLog = [];
+    p.tradeLog.push({ round: state.round, type: 'sell', ticker: s.ticker, name: s.name, qty: val, price: s.price, pnl });
   } 
   else if (type === 'pledge') {
     const qty = getStockQty(p, s.ticker);
@@ -2215,6 +2210,8 @@ function tradeStock(type) {
     
     log(`🔒 <b>${p.name}</b> 將持有的 ${val} 股「${s.name}」進行質押，取得現金 $${fmt(loan)}。`, '#a78bfa');
     state.turnActions.push(`🔒 質押 ${val} 股「${s.name}」借款 $${fmt(loan)}`);
+    if (!p.tradeLog) p.tradeLog = [];
+    p.tradeLog.push({ round: state.round, type: 'pledge', ticker: s.ticker, name: s.name, qty: val, price: s.price });
   } 
   else if (type === 'redeem') {
     const pledged = p.pledged[s.ticker];
@@ -2240,6 +2237,8 @@ function tradeStock(type) {
     delete p.pledged[s.ticker];
     log(`🔓 <b>${p.name}</b> 還清定額本息 $${fmt(cost)}，成功贖回 ${pledged.shares} 股「${s.name}」。`, '#34d399');
     state.turnActions.push(`🔓 贖回 ${pledged.shares} 股「${s.name}」`);
+    if (!p.tradeLog) p.tradeLog = [];
+    p.tradeLog.push({ round: state.round, type: 'redeem', ticker: s.ticker, name: s.name, qty: pledged.shares, price: s.price });
   }
   syncState();
   renderAll();
@@ -2393,8 +2392,11 @@ function declareBankruptcy(p) {
 /* =========================================================
    道具卡 UI 與使用
 ========================================================= */
+let itemPanelShopMode = false; // true 時道具面板才顯示「購買區」（只在道具商店格觸發）
+
 function openItems() {
   if (!isMyTurn()) return;
+  itemPanelShopMode = false; // 從工具列開啟＝只能使用背包，不能購買
   closePanels();
   renderItems();
   $('itemPanel').style.display = 'flex';
@@ -2402,6 +2404,7 @@ function openItems() {
 
 function closeItems() {
   $('itemPanel').style.display = 'none';
+  itemPanelShopMode = false; // 關閉後重設，下次從工具列開啟為背包模式
 }
 
 function renderItems() {
@@ -2440,18 +2443,24 @@ function renderItems() {
   $('itemBody').innerHTML = `
     <div class="flex items-center justify-between mb-3 border-b border-[#26314a] pb-2">
       <div class="display text-xl font-bold text-[#f5c451] flex items-center gap-2">
-        <span>🎴 道具商店</span>
+        <span>${itemPanelShopMode ? '🛒 道具商店' : '🎴 道具背包'}</span>
         <span class="text-xs text-[#8a98b3] font-normal">（剩餘點數：${p.points} PP）</span>
       </div>
       <button class="btn btn-ghost px-3 py-1 text-xs" onclick="closeItems()">關閉 ✕</button>
     </div>
     
+    ${itemPanelShopMode ? `
     <div class="mb-5">
-      <div class="text-xs font-bold text-[#f5c451] mb-2">🛒 商品架（請使用 PP 點數購買）</div>
+      <div class="text-xs font-bold text-[#f5c451] mb-2">🛒 商品架（請使用 PP 點數購買；只有踩到道具商店格才能購買）</div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         ${shopHTML}
       </div>
     </div>
+    ` : `
+    <div class="mb-3 text-[11px] text-[#8a98b3] bg-[#1a2233] border border-[#26314a] rounded-lg p-2">
+      💡 道具卡只能在地圖上的「🛒 道具商店」格購買；此處僅供查看與使用您已持有的道具。
+    </div>
+    `}
     
     <div>
       <div class="text-xs font-bold text-[#34d399] mb-2">💼 您的背包（上限 3 張）</div>
@@ -2467,6 +2476,10 @@ function buyItem(itemKey) {
   const item = ITEMS[itemKey];
   if (!item) return;
   
+  if (!itemPanelShopMode) {
+    alertModal('無法購買', '道具卡只能在地圖上的「🛒 道具商店」格購買。');
+    return;
+  }
   if (p.items.length >= 3) {
     alertModal('購買失敗', '您的卡片包已滿（上限持有 3 張道具卡）。');
     return;
@@ -2839,12 +2852,15 @@ window.onRollClick = onRollClick;
 
 async function openShopBuy(p) {
   log(`🛒 <b>${p.name}</b> 抵達道具商店。`, '#22d3ee');
-  const choose = await showChoice('🛒 抵達道具商店', `歡迎光臨道具商店！您是否要開啟道具背包與商店進行購買？`, [
-    { label: '🛒 開啟商店', value: true, cls: 'btn-gold' },
+  const choose = await showChoice('🛒 抵達道具商店', `歡迎光臨道具商店！您可以在此使用 PP 點數購買道具卡。是否開啟商店？`, [
+    { label: '🛒 開啟商店購買', value: true, cls: 'btn-gold' },
     { label: '🚪 直接離開', value: false, cls: 'btn-ghost' }
   ]);
   if (choose) {
-    openItems();
+    itemPanelShopMode = true; // 商店格才開放購買
+    closePanels();
+    renderItems();
+    $('itemPanel').style.display = 'flex';
   }
 }
 
