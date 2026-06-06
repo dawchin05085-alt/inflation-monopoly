@@ -1,314 +1,352 @@
-<!DOCTYPE html>
-<html lang="zh-Hant" class="h-full">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DC大富翁 · DC Monopoly</title>
-  <!-- 引入 Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontSize: {
-            'xs': '13.5px',
-            'sm': '15.5px',
-            'md': '17.5px',
-            'lg': '19.5px',
-            'xl': '22px',
-            '2xl': '26px',
-            '3xl': '32px',
-          }
-        }
-      }
-    }
-  </script>
-  <!-- 引入 PeerJS WebRTC P2P 連線庫 -->
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <!-- Google Fonts 引入 -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@500;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <!-- 引入自訂樣式表 -->
-  <link rel="stylesheet" href="style.css">
-</head>
-<body class="h-full">
-  <!-- ===================== 設定畫面 ===================== -->
-  <div id="setupScreen" class="overlay" style="background: rgba(4, 7, 12, 0.96); z-index: 80;">
-    <div class="card pop scroll" style="max-width: 860px; width: 100%; padding: 26px; max-height: 94vh; overflow: auto;">
-      <div class="flex items-center justify-between border-b border-[#26314a] pb-3 mb-4 flex-wrap gap-2">
-        <div class="flex items-center gap-3">
-          <div class="display text-3xl font-bold text-[#f5c451]">DC大富翁</div>
-          <span class="chip mono text-[#34d399] border-[#34d399]">BLITZ · WEBRTC ONLINE</span>
-        </div>
-        <span class="text-xs text-[#8a98b3]">P2P 多人線上連線對戰版 · 免伺服器架構</span>
-      </div>
-      <!-- 連線模式選擇 -->
-      <label class="text-xs text-[#8a98b3] font-bold block mb-1">1. 選擇遊戲對戰模式</label>
-      <div class="flex gap-3 mb-4 flex-wrap">
-        <button id="btnModeLocal" class="btn btn-gold px-4 py-2 text-xs" onclick="setPlayMode('local')">🖥️ 單機多人 (同屏熱座)</button>
-        <button id="btnModeOnline" class="btn btn-ghost px-4 py-2 text-xs" onclick="setPlayMode('online')">🌐 線上多人連線 (WebRTC P2P)</button>
-      </div>
-      <!-- 線上連線控制區 -->
-      <div id="onlineConfigSection" style="display: none;" class="p-4 border border-[#26314a] rounded-lg bg-[#121826] mb-4">
-        <div class="flex flex-col md:flex-row gap-4">
-          <!-- Host 建立房間 -->
-          <div class="flex-1 border-b md:border-b-0 md:border-r border-[#26314a] pb-4 md:pb-0 md:pr-4">
-            <div class="text-xs font-bold text-[#f5c451] mb-2">A. 建立房間 (我是房主)</div>
-            <button class="btn btn-gold px-3 py-1.5 text-xs w-full mb-2" onclick="hostOnlineRoom()">🔑 建立多人房間</button>
-            <div class="text-xs text-[#8a98b3] mb-1">您的房間代碼（傳送給朋友）：</div>
-            <div id="hostRoomCode" class="mono font-bold text-md text-[#34d399] tracking-wider select-all border border-[#26314a] p-2 bg-[#0b0f17] rounded text-center">—</div>
-          </div>
-          <!-- Join 加入房間 -->
-          <div class="flex-1 md:pl-4">
-            <div class="text-xs font-bold text-[#60a5fa] mb-2">B. 加入房間 (我是訪客)</div>
-            <div class="flex gap-2">
-              <input id="joinRoomCode" type="text" placeholder="輸入房主的代碼 (如: BLITZ-1234)" class="seg text-xs py-1.5 flex-1 mono uppercase">
-              <button class="btn btn-ghost px-3 py-1.5 text-xs shrink-0" onclick="joinOnlineRoom()">⚡ 連線加入</button>
-            </div>
-            <div class="text-[11px] text-[#8a98b3] mt-2 leading-relaxed">
-              連線成功後，房間規則、初始資金與點數等進階設定將以房主的設定為準。
-            </div>
-          </div>
-        </div>
-        
-        <div class="mt-4 pt-3 border-t border-[#26314a]">
-          <div class="text-xs font-bold text-[#e6edf7] mb-1.5">房間內連線成員名單：</div>
-          <div id="onlinePlayerList" class="flex flex-wrap gap-2 text-xs text-[#8a98b3]">
-            <span class="chip border-[#26314a]">等待建立或連線加入中...</span>
-          </div>
-        </div>
-      </div>
-      <label class="text-xs text-[#8a98b3] font-bold block mb-1">2. 選擇玩家人數 (2–8人)</label>
-      <div id="pcountRow" class="flex gap-2 mt-1 mb-4 flex-wrap"></div>
-      <label class="text-xs text-[#8a98b3] font-bold block mb-1">3. 遊戲基礎參數設定</label>
-      <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-1 mb-4">
-        <div>
-          <label class="text-[11px] text-[#8a98b3]">回合時限 (秒，0 = 無限)</label>
-          <input id="cfgTime" type="number" min="0" value="30" class="seg mt-1 text-sm">
-        </div>
-        <div>
-          <label class="text-[11px] text-[#8a98b3]">通膨觸發 (每幾輪)</label>
-          <input id="cfgInfTurn" type="number" min="1" value="5" class="seg mt-1 text-sm">
-        </div>
-        <div>
-          <label class="text-[11px] text-[#8a98b3]">通膨幅度 (%)</label>
-          <input id="cfgInfRate" type="number" min="1" value="50" class="seg mt-1 text-sm">
-        </div>
-        <div>
-          <label class="text-[11px] text-[#8a98b3]">初始現金 ($)</label>
-          <input id="cfgCash" type="number" min="0" value="25000" class="seg mt-1 text-sm">
-        </div>
-        <div>
-          <label class="text-[11px] text-[#8a98b3]">初始定存存款 ($)</label>
-          <input id="cfgSave" type="number" min="0" value="6000" class="seg mt-1 text-sm">
-        </div>
-        <div>
-          <label class="text-[11px] text-[#8a98b3]">初始點數 (PP)</label>
-          <input id="cfgPoints" type="number" min="0" value="100" class="seg mt-1 text-sm">
-        </div>
-      </div>
-      <!-- 客製化進階設定折疊面板 -->
-      <div class="border border-[#26314a] rounded-lg p-3 mb-4 bg-[#121826]">
-        <button type="button" class="text-xs text-[#f5c451] font-bold flex items-center gap-1.5 focus:outline-none w-full text-left" onclick="toggleAdvancedConfig()">
-          <span>⚙️ 進階客製化參數 (點擊展開/折疊)</span>
-          <span id="advChevron">▼</span>
-        </button>
-        
-        <div id="advancedConfigPanel" style="display: none;" class="mt-3 border-t border-[#26314a] pt-3">
-          <div class="text-xs font-semibold text-[#8a98b3] mb-2">A. 道具卡點數價格自訂</div>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            <div>
-              <label class="text-[10px] text-[#8a98b3]">通膨加速卡 🔥</label>
-              <input id="priceAccel" type="number" min="1" value="100" class="seg mt-1 text-xs py-1.5">
-            </div>
-            <div>
-              <label class="text-[10px] text-[#8a98b3]">經濟凍結卡 ❄️</label>
-              <input id="priceFreeze" type="number" min="1" value="90" class="seg mt-1 text-xs py-1.5">
-            </div>
-            <div>
-              <label class="text-[10px] text-[#8a98b3]">金融海嘯卡 🌊</label>
-              <input id="priceTsunami" type="number" min="1" value="110" class="seg mt-1 text-xs py-1.5">
-            </div>
-            <div>
-              <label class="text-[10px] text-[#8a98b3]">遙控骰子 🎯</label>
-              <input id="priceDice" type="number" min="1" value="80" class="seg mt-1 text-xs py-1.5">
-            </div>
-            <div>
-              <label class="text-[10px] text-[#8a98b3]">路障卡 🚧</label>
-              <input id="priceBarricade" type="number" min="1" value="50" class="seg mt-1 text-xs py-1.5">
-            </div>
-            <div>
-              <label class="text-[10px] text-[#8a98b3]">請神符 📜</label>
-              <input id="priceSummon" type="number" min="1" value="90" class="seg mt-1 text-xs py-1.5">
-            </div>
-            <div>
-              <label class="text-[10px] text-[#8a98b3]">送神符 🧧</label>
-              <input id="priceDismiss" type="number" min="1" value="60" class="seg mt-1 text-xs py-1.5">
-            </div>
-          </div>
-          
-          <div class="text-xs font-semibold text-[#8a98b3] mb-2">B. 點數獲取數量自訂</div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-[10px] text-[#8a98b3]">經過或起點獎勵點數</label>
-              <input id="gainStartPoints" type="number" min="0" value="25" class="seg mt-1 text-xs py-1.5">
-            </div>
-            <div>
-              <label class="text-[10px] text-[#8a98b3]">踩到命運/新聞獎勵點數</label>
-              <input id="gainEventPoints" type="number" min="0" value="15" class="seg mt-1 text-xs py-1.5">
-            </div>
-          </div>
-        </div>
-      </div>
-      <label class="text-xs text-[#8a98b3] font-bold block mb-1">4. 玩家名稱設定與角色 ICON 代號</label>
-      <div class="mt-1 grid grid-cols-1 md:grid-cols-2 gap-3 mb-5" id="nameInputs">
-        <!-- 玩家輸入組件將動態建立於此 -->
-      </div>
-      <div class="mt-6 flex items-center justify-between flex-wrap gap-4 border-t border-[#26314a] pt-4">
-        <div class="text-xs text-[#8a98b3] max-w-[500px]">
-          提示：線上模式下，訪客連線加入後將佔用後續的玩家席位。房主準備就緒後點擊建立戰局，所有玩家畫面將會自動同步進入地圖對局。
-        </div>
-        <button id="btnStartGame" class="btn btn-gold px-8 py-3 text-lg display" onclick="startGame()">建立戰局 ▸</button>
-      </div>
-    </div>
-  </div>
-  <!-- ===================== 主畫面 ===================== -->
-  <div id="game" class="hidden h-full w-full relative">
-    
-    <!-- 頂部狀態列 -->
-    <div class="absolute left-0 right-0 top-0 z-30 flex items-center justify-between" style="padding: 10px 14px; gap: 12px; pointer-events: none;">
-      <div class="card flex items-center gap-3" style="padding: 8px 14px; pointer-events: auto;">
-        <div class="display font-bold text-[#f5c451]">DC大富翁</div>
-        <span class="chip mono" id="roundChip">第 1 輪</span>
-        <span class="chip mono text-[#f87171]" id="infChip">×1.00</span>
-      </div>
-      
-      <div class="card flex items-center gap-3" style="padding: 8px 14px; min-width: 340px; pointer-events: auto;">
-        <span class="pawn font-bold text-lg" id="turnPawn">🏎️</span>
-        <span class="font-bold shrink-0 text-[#f5c451]" id="turnName">—</span>
-        <div class="flex-1">
-          <div class="flex justify-between text-xs">
-            <span class="text-[#8a98b3]">回合時限</span>
-            <span class="mono text-[#f5c451]" id="timerTxt">--</span>
-          </div>
-          <div class="timerbar mt-1">
-            <div id="timerFill" class="timerfill" style="width: 100%;"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <!-- 左側玩家狀態面板 (常開但可最小化) -->
-    <div id="leftSidebar" class="absolute left-3 top-[84px] z-30 card flex flex-col transition-all duration-300" style="width: 280px; max-height: calc(100vh - 240px); box-shadow: 0 4px 20px rgba(0,0,0,0.5); overflow: hidden;">
-      <div class="flex items-center justify-between border-b border-[#26314a] p-3 bg-[#121826] shrink-0">
-        <span class="display font-bold text-sm text-[#f5c451]">👥 玩家即時狀態</span>
-        <button class="text-xs text-[#8a98b3] hover:text-[#e6edf7] font-bold" onclick="toggleSidebar()">
-          <span id="sidebarToggleArrow">◀ 收合</span>
-        </button>
-      </div>
-      <div id="sidebarContent" class="p-3 flex-1 overflow-y-auto scroll flex flex-col gap-2.5">
-        <!-- 動態載入玩家簡短狀態 -->
-      </div>
-    </div>
-    <!-- 當 sidebar 最小化時的迷你懸浮按鈕 -->
-    <button id="sidebarExpandBtn" class="absolute left-3 top-[84px] z-30 btn btn-gold px-3 py-2 text-xs hidden" onclick="toggleSidebar()">
-      ▶ 展開狀態列
-    </button>
-    <!-- 地圖視口 (Viewport) -->
-    <div id="mapViewport">
-      <div id="mapWorld">
-        <svg id="mapEdges" style="position: absolute; left: 0; top: 0; overflow: visible;"></svg>
-        <!-- 地圖節點將會動態渲染於此 -->
-      </div>
-    </div>
-    <!-- 地圖控制按鈕 -->
-    <div class="absolute z-30 flex flex-col gap-2" style="right: 14px; top: 84px;">
-      <button class="btn btn-gold mapbtn" title="回正（置中目前玩家）" onclick="recenter()">⌖</button>
-      <button class="btn btn-ghost mapbtn" title="放大" onclick="zoomBy(1.15)">＋</button>
-      <button class="btn btn-ghost mapbtn" title="縮小" onclick="zoomBy(0.87)">－</button>
-    </div>
-    <!-- 中央骰子控制區 -->
-    <div id="diePod" class="absolute z-30 card flex items-center gap-4" style="left: 50%; transform: translateX(-50%); bottom: 86px; padding: 12px 18px; min-width: 340px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
-      <div id="die" class="die">
-        <div class="pip"></div><div class="pip"></div><div class="pip"></div>
-        <div class="pip"></div><div class="pip"></div><div class="pip"></div>
-        <div class="pip"></div><div class="pip"></div><div class="pip"></div>
-      </div>
-      <div class="flex-1">
-        <div id="centerMsg" class="text-sm font-bold text-[#8a98b3]">準備開始</div>
-      </div>
-    </div>
-    <!-- 底部操作功能列 -->
-    <div class="absolute left-0 right-0 bottom-0 z-30 flex justify-center" style="padding: 12px;">
-      <div class="card flex items-center gap-2 flex-wrap justify-center" style="padding: 10px 14px;">
-        <button id="btnRoll" class="btn btn-gold px-6 py-2 text-sm" onclick="onRollClick()">🎲 擲骰移動</button>
-        <button id="btnStock" class="btn btn-ghost px-3.5 py-2 text-sm" onclick="openStock()">📈 股市交易</button>
-        <button id="btnItems" class="btn btn-ghost px-3.5 py-2 text-sm" onclick="openItems()">🎴 道具卡片</button>
-        <button id="btnBuild" class="btn btn-ghost px-3.5 py-2 text-sm" onclick="openBuild()">🏠 蓋房升級</button>
-        <button id="btnPlayers" class="btn btn-ghost px-3.5 py-2 text-sm" onclick="openPlayers()">👥 玩家狀態</button>
-        <button id="btnLog" class="btn btn-ghost px-3.5 py-2 text-sm" onclick="openLog()">📜 事件紀錄</button>
-        <button id="btnEnd" class="btn btn-ghost px-4 py-2 text-sm" onclick="manualEnd()" disabled style="opacity: 0.4;">⏭ 結束回合</button>
-      </div>
-    </div>
-  </div>
-  <!-- 通用決定 Modal -->
-  <div id="modal" class="overlay" style="display: none; z-index: 90;">
-    <div id="modalBox" class="card pop" style="max-width: 520px; width: 100%; padding: 24px;">
-      <!-- 內容將動態產生 -->
-    </div>
-  </div>
-  <!-- 全域通膨警報 -->
-  <div id="inflationAlert" class="overlay" style="display: none; background: rgba(60, 8, 8, 0.85); z-index: 70;">
-    <div class="text-center pop">
-      <div class="display font-black text-[#ff5d5d]" style="font-size: 64px; text-shadow: 0 0 30px rgba(255, 80, 80, 0.6);">⚠ 通膨爆發</div>
-      <div id="inflationAlertSub" class="display text-2xl mt-2 text-[#f5c451]"></div>
-    </div>
-  </div>
-  <!-- 股市面板 -->
-  <div id="stockPanel" class="overlay" style="display: none;">
-    <div class="card pop" style="max-width: 980px; width: 100%; padding: 20px; max-height: 92vh; display: flex; flex-direction: column;">
-      <div id="stockBody" style="display: flex; flex-direction: column; min-height: 0; flex: 1;">
-        <!-- 動態渲染股市 -->
-      </div>
-    </div>
-  </div>
-  <!-- 道具面板 -->
-  <div id="itemPanel" class="overlay" style="display: none;">
-    <div class="card pop scroll" style="max-width: 600px; width: 100%; padding: 20px; max-height: 90vh; overflow: auto;">
-      <div id="itemBody">
-        <!-- 動態渲染道具 -->
-      </div>
-    </div>
-  </div>
-  <!-- 蓋房面板 -->
-  <div id="buildPanel" class="overlay" style="display: none;">
-    <div class="card pop scroll" style="max-width: 640px; width: 100%; padding: 20px; max-height: 90vh; overflow: auto;">
-      <div id="buildBody">
-        <!-- 動態渲染蓋房 -->
-      </div>
-    </div>
-  </div>
-  <!-- 玩家狀態詳細面板 -->
-  <div id="playersPanel" class="overlay" style="display: none;">
-    <div class="card pop scroll" style="max-width: 900px; width: 100%; padding: 20px; max-height: 90vh; overflow: auto;">
-      <div id="playersBody">
-        <!-- 動態渲染玩家清單 -->
-      </div>
-    </div>
-  </div>
-  <!-- 事件紀錄面板 -->
-  <div id="logPanel" class="overlay" style="display: none;">
-    <div class="card pop" style="max-width: 600px; width: 100%; padding: 20px; max-height: 90vh; display: flex; flex-direction: column;">
-      <div class="flex items-center justify-between mb-3 border-b border-[#26314a] pb-2">
-        <div class="display text-xl font-bold text-[#f5c451]">📜 事件紀錄</div>
-        <button class="btn btn-ghost px-3 py-1 text-xs" onclick="closeLog()">關閉 ✕</button>
-      </div>
-      <div id="log" class="scroll pr-1" style="overflow: auto; flex: 1; display: flex; flex-direction: column;">
-        <!-- 動態紀錄內容 -->
-      </div>
-    </div>
-  </div>
-  <!-- 引入外部 JavaScript 邏輯 -->
-  <script src="app.js?v=2.1" defer></script>
-</body>
-</html>
+:root {
+  --bg: #0b0f17;
+  --panel: #121826;
+  --panel2: #1a2233;
+  --line: #26314a;
+  --gold: #f5c451;
+  --gold2: #ffe08a;
+  --green: #34d399;
+  --red: #f87171;
+  --blue: #60a5fa;
+  --purple: #a78bfa;
+  --txt: #e6edf7;
+  --muted: #8a98b3;
+}
+* {
+  box-sizing: border-box;
+}
+html, body {
+  margin: 0;
+  height: 100%;
+}
+body {
+  background:
+    radial-gradient(1200px 700px at 80% -10%, rgba(245, 196, 81, 0.08), transparent 60%),
+    radial-gradient(900px 600px at -10% 110%, rgba(96, 165, 250, 0.08), transparent 55%),
+    var(--bg);
+  color: var(--txt);
+  font-family: 'Noto Sans TC', 'Chakra Petch', sans-serif;
+  overflow: hidden;
+}
+.display {
+  font-family: 'Chakra Petch', 'Noto Sans TC', sans-serif;
+  letter-spacing: 0.5px;
+}
+.mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+.card {
+  background: linear-gradient(180deg, var(--panel), #0f1420);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll::-webkit-scrollbar-thumb {
+  background: #2c3a58;
+  border-radius: 8px;
+}
+.scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.glow {
+  box-shadow: 0 0 0 1px rgba(245, 196, 81, 0.5), 0 0 22px rgba(245, 196, 81, 0.25);
+}
+.btn {
+  transition: all 0.15s ease;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn-gold {
+  background: linear-gradient(180deg, var(--gold2), var(--gold));
+  color: #3a2a00;
+}
+.btn-gold:hover {
+  filter: brightness(1.07);
+  box-shadow: 0 0 12px rgba(245, 196, 81, 0.3);
+}
+.btn-gold:disabled {
+  background: #2c3440;
+  color: #5a6475;
+  cursor: not-allowed;
+  filter: none;
+  box-shadow: none;
+}
+.btn-ghost {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  color: var(--txt);
+}
+.btn-ghost:hover {
+  border-color: var(--gold);
+  background: rgba(245, 196, 81, 0.05);
+}
+.btn-red {
+  background: linear-gradient(180deg, #ff8a8a, #ef4444);
+  color: #3a0000;
+}
+.btn-red:hover {
+  filter: brightness(1.07);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.3);
+}
+.btn-green {
+  background: linear-gradient(180deg, #6ee7b7, #10b981);
+  color: #06241a;
+}
+.btn-green:hover {
+  filter: brightness(1.07);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+}
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 7, 12, 0.72);
+  backdrop-filter: blur(6px);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+.pop {
+  animation: pop 0.22s ease-out;
+}
+@keyframes pop {
+  from {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes flash {
+  0% { opacity: 0; transform: scale(0.95); }
+  15% { opacity: 1; transform: scale(1); }
+  85% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.95); }
+}
+.inflation-flash {
+  animation: flash 1.8s forwards ease-in-out;
+}
+.die {
+  width: 68px;
+  height: 68px;
+  border-radius: 15px;
+  background: linear-gradient(180deg, #fff, #dfe6f0);
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr 1fr;
+  padding: 10px;
+  gap: 3px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+  user-select: none;
+}
+.pip {
+  background: #111;
+  border-radius: 50%;
+  align-self: center;
+  justify-self: center;
+  width: 12px;
+  height: 12px;
+  visibility: hidden;
+}
+@keyframes roll {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.15); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+.rolling {
+  animation: roll 0.5s ease-in-out;
+}
+.chip {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+.timerbar {
+  height: 8px;
+  border-radius: 999px;
+  background: #202a40;
+  overflow: hidden;
+}
+.timerfill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--green), var(--gold));
+  transition: width 0.25s linear;
+}
+.deity-badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+input[type=number], input[type=text] {
+  font-family: 'JetBrains Mono', 'Noto Sans TC', sans-serif;
+}
+.seg {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 12px;
+  width: 100%;
+  color: var(--txt);
+  transition: border-color 0.15s ease;
+}
+.seg:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+.log-line {
+  border-left: 3px solid var(--line);
+  padding: 4px 10px;
+  margin-bottom: 5px;
+  font-size: 13px;
+  line-height: 1.4;
+  background: rgba(38, 49, 74, 0.15);
+  border-radius: 0 6px 6px 0;
+}
+/* 地圖樣式 */
+#mapViewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: grab;
+  background:
+    radial-gradient(1200px 800px at 30% 20%, rgba(96, 165, 250, 0.07), transparent 60%),
+    radial-gradient(1000px 700px at 80% 80%, rgba(245, 196, 81, 0.06), transparent 60%);
+}
+#mapViewport.dragging {
+  cursor: grabbing;
+}
+#mapWorld {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+.mnode {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 196px;
+  min-height: 96px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel2);
+  padding: 8px 10px 10px;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+  user-select: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.mnode .bar {
+  height: 7px;
+  border-radius: 3px;
+  margin-bottom: 6px;
+}
+.mnode .nname {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.mnode .nmeta {
+  font-size: 13.5px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.mnode .ngrp {
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 3px;
+}
+.mnode.hl {
+  outline: 2px solid var(--gold);
+  box-shadow: 0 0 20px rgba(245, 196, 81, 0.65);
+  transform: translate(-50%, -50%) scale(1.08);
+  z-index: 10;
+}
+.mnode.fork {
+  border-color: var(--gold);
+}
+.pawn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #0b0f17;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  background: #ffffff;
+  color: #0b0f17;
+}
+.mapbtn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 18px;
+}
+.pcount {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--txt);
+  font-weight: 800;
+  font-size: 16px;
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  transition: all 0.15s ease;
+}
+.pcount.active {
+  background: linear-gradient(180deg, var(--gold2), var(--gold));
+  color: #3a2a00;
+  border-color: var(--gold);
+}
+/* 股票走勢小圖 */
+.sparkline {
+  display: block;
+  width: 100px;
+  height: 24px;
+}
+/* 撲克牌樣式 */
+.poker-card {
+  width: 80px;
+  height: 120px;
+  border-radius: 8px;
+  background: white;
+  color: black;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 8px;
+  font-weight: bold;
+  font-size: 18px;
+  border: 1px solid #ddd;
+  user-select: none;
+}
+.poker-card.red {
+  color: #ef4444;
+}
+.poker-card.black {
+  color: #1f2937;
+}
