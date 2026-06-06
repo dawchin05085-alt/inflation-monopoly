@@ -208,6 +208,11 @@
       </div>
     </div>
 
+    <!-- 常駐事件跑馬燈：所有玩家（含連線端）即時看到最新動作 -->
+    <div class="absolute left-1/2 z-30" style="top: 60px; transform: translateX(-50%); pointer-events: none; max-width: 72vw;">
+      <div id="eventTicker" class="card mono" style="padding: 6px 16px; font-size: 13px; opacity: 0; transition: opacity .3s ease; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-color: var(--gold); box-shadow: 0 0 14px rgba(245,196,81,.25);"></div>
+    </div>
+
     <!-- 左側玩家狀態面板 (常開但可最小化) -->
     <div id="leftSidebar" class="absolute left-3 top-[84px] z-30 card flex flex-col transition-all duration-300" style="width: 280px; max-height: calc(100vh - 240px); box-shadow: 0 4px 20px rgba(0,0,0,0.5); overflow: hidden;">
       <div class="flex items-center justify-between border-b border-[#26314a] p-3 bg-[#121826] shrink-0">
