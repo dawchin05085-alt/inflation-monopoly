@@ -186,28 +186,49 @@ function buildNameInputs() {
       return `<option value="${icon}" ${selected}>${ICON_LABELS[icon]}</option>`;
     }).join('');
     
-    // 如果是連線模式，除了房主自己 (席位0) 以外，其餘由加入者同步，不開放手動輸入
-    const isDisabled = (playMode === 'online' && i > 0) ? 'disabled' : '';
+    // 判斷是否為本機玩家所屬席位
+    let isEditable = true;
+    if (playMode === 'online') {
+      if (peerRole === 'host') {
+        isEditable = (i === 0);
+      } else {
+        const myIdx = onlinePlayers.findIndex(p => p.peerId === peer.id);
+        isEditable = (i === myIdx);
+      }
+    }
+    
+    const isDisabled = isEditable ? '' : 'disabled';
     
     box.innerHTML += `<div class="p-2 border border-[#26314a] rounded bg-[#1a2233] flex flex-col gap-1.5">
       <label class="text-xs flex items-center gap-1.5 font-bold" style="color: var(--muted)">
         <span style="width:12px; height:12px; border-radius:50%; display:inline-block; background:${PLAYER_COLORS[i]}"></span>席位 ${i + 1}
       </label>
       <div class="grid grid-cols-2 gap-2">
-        <input id="name${i}" class="seg text-xs py-1.5" value="${PLAYER_DEF_NAMES[i]}" ${isDisabled} onchange="onLobbyInputChange()">
-        <select id="icon${i}" class="seg text-xs py-1.5" ${isDisabled} onchange="onLobbyInputChange()">${iconOptions}</select>
+        <input id="name${i}" class="seg text-xs py-1.5" value="${PLAYER_DEF_NAMES[i]}" ${isDisabled} onchange="onLobbyInputChange(${i})">
+        <select id="icon${i}" class="seg text-xs py-1.5" ${isDisabled} onchange="onLobbyInputChange(${i})">${iconOptions}</select>
       </div>
     </div>`;
   }
 }
 
-function onLobbyInputChange() {
+function onLobbyInputChange(seatIdx) {
+  const nameVal = $('name' + seatIdx).value;
+  const iconVal = $('icon' + seatIdx).value;
+  
   if (playMode === 'online') {
-    // 房主自己改名字或 Icon
     if (peerRole === 'host') {
-      onlinePlayers[0].name = $('name0').value;
-      onlinePlayers[0].icon = $('icon0').value;
+      onlinePlayers[0].name = nameVal;
+      onlinePlayers[0].icon = iconVal;
       syncLobbyData();
+    } else {
+      // 訪客向房主發送修改名稱與Icon請求
+      if (connToHost && connToHost.open) {
+        connToHost.send({
+          type: 'LOBBY_UPDATE_REQUEST',
+          name: nameVal,
+          icon: iconVal
+        });
+      }
     }
   }
 }
@@ -529,6 +550,7 @@ function startGame() {
     selStock: STOCK_DEF[0][0],
     selCat: 'all',
     logHistory: [],
+    turnActions: [],
     
     mapDeity: null,
     mapDemon: null,
@@ -948,6 +970,7 @@ function renderAll() {
   }
   
   renderLogs();
+  renderSidebar();
   if ($('playersPanel').style.display === 'flex') renderPlayers();
   if ($('stockPanel').style.display === 'flex') renderStock();
   if ($('buildPanel').style.display === 'flex') renderBuild();
@@ -1094,6 +1117,15 @@ function alertModal(t, h) {
 async function beginTurn() {
   const p = curPlayer();
   if (!p.alive) return endTurn();
+  
+  // 顯示前一個玩家的回合簡報
+  if (state.turnActions && state.turnActions.length > 0 && lastActiveTurnIndex !== -1) {
+    const prevP = state.players[lastActiveTurnIndex];
+    if (prevP) {
+      showTurnBriefingModal(prevP, state.turnActions);
+    }
+  }
+  state.turnActions = [];
   
   lastActiveTurnIndex = state.current;
   busy = false;
@@ -1253,6 +1285,7 @@ async function doRoll(forced) {
   
   await animateDie(steps);
   $('centerMsg').textContent = `${p.name} 擲出了 ${steps} 點`;
+  state.turnActions.push(`🎲 擲出 ${steps} 點，移動至「${nodeById(p.node).name}」`);
   
   await walk(p, steps);
   await resolveNode(p);
@@ -1398,6 +1431,7 @@ async function resolveNode(p) {
 
 async function runCasino(p) {
   log(`🎰 <b>${p.name}</b> 進入中央賭場！`, '#d97706');
+  state.turnActions.push(`🎰 進入賭場`);
   
   if (p.points <= 0) {
     await alertModal('🎰 賭場臨櫃', '「抱歉，您的點數已歸零，無法進行博弈下注！」');
@@ -1437,6 +1471,7 @@ async function runCasino(p) {
   
   if (!ans) {
     log(`🎰 <b>${p.name}</b> 拒絕在賭場下注並離開。`, p.color);
+    state.turnActions.push(`🎰 拒絕博弈，離開賭場`);
     return;
   }
   
@@ -1474,6 +1509,7 @@ async function runCasino(p) {
     const gain = bet * 2;
     p.points += gain;
     log(`🎰 賭局大捷！<b>${p.name}</b> 下注 ${bet} PP，開出 ${secondSuit}${secondValLabel} 贏得點數 ${gain} PP。`, '#34d399');
+    state.turnActions.push(`🎰 賭場下注 ${bet} PP 預測【${ans === 'high' ? '更大' : '更小'}】，第二張開出 ${secondSuit}${secondValLabel} 獲勝！贏得 ${gain} PP`);
     await alertModal('🎰 賭場開牌：獲勝！', `
       ${secondCardHTML}
       開牌結果：第二張為 <b>${secondSuit} ${secondValLabel}</b>！<br>
@@ -1483,6 +1519,7 @@ async function runCasino(p) {
   else if (result === 'tie') {
     p.points += bet; 
     log(`🎰 賭局和局。<b>${p.name}</b> 下注 ${bet} PP 全額退回。`, '#8a98b3');
+    state.turnActions.push(`🎰 賭場下注 ${bet} PP 預測【${ans === 'high' ? '更大' : '更小'}】，開出同點數，平手退還`);
     await alertModal('🎰 賭場開牌：和局', `
       ${secondCardHTML}
       開牌結果：第二張同樣是 <b>${secondSuit} ${secondValLabel}</b>！<br>
@@ -1491,6 +1528,7 @@ async function runCasino(p) {
   } 
   else {
     log(`🎰 賭局失利！<b>${p.name}</b> 下注 ${bet} PP，開出 ${secondSuit}${secondValLabel} 慘遭沒收。`, '#f87171');
+    state.turnActions.push(`🎰 賭場下注 ${bet} PP 預測【${ans === 'high' ? '更大' : '更小'}】，第二張開出 ${secondSuit}${secondValLabel} 預測失敗！損失 ${bet} PP`);
     await alertModal('🎰 賭場開牌：猜錯了！', `
       ${secondCardHTML}
       開牌結果：第二張為 <b>${secondSuit} ${secondValLabel}</b>！<br>
@@ -1539,6 +1577,7 @@ async function onProperty(p, n) {
     n.level = 0;
     n.lastActionRound = state.round; 
     log(`⛩️ 大土地公顯靈！<b>${p.name}</b> 免費過戶了 ${old.name} 的地產「${n.name}」！`, DEITIES.land.color);
+    state.turnActions.push(`⛩️ 土地公顯靈，強制過戶了 ${old.name} 的地產「${n.name}」`);
     if (playMode === 'local' || p.peerId === peer.id) {
       await alertModal('大土地公神蹟', `大土地公強制將 <b>${old.name}</b> 所持有的「${n.name}」免費過戶給您！`);
     }
@@ -1579,8 +1618,10 @@ async function onProperty(p, n) {
         n.owner = p.id;
         n.lastActionRound = state.round; 
         log(`🏙 <b>${p.name}</b> 買下了「${n.name}」，花費現金 $${fmt(cost)}。`, p.color);
+        state.turnActions.push(`🏙️ 買下地產「${n.name}」（花費 $${fmt(cost)}）`);
         if (isMonopoly(n)) {
           log(`👑 <b>${p.name}</b> 壟斷「${n.groupName}」整段，地租加倍！`, n.groupColor);
+          state.turnActions.push(`👑 達成「${n.groupName}」路段壟斷`);
           await alertModal('👑 區域壟斷成功！', `恭喜！您已壟斷「<b>${n.groupName}</b>」的所有地產！<br>該區地租已<b>翻倍</b>。`);
         }
       }
@@ -1594,6 +1635,7 @@ async function onProperty(p, n) {
     const rent = rentDue(p, owner, n);
     if (rent <= 0) {
       log(`🛡 <b>${p.name}</b> 踩中 ${owner.name} 的「${n.name}」，獲得神明減免，免除地租。`, p.color);
+      state.turnActions.push(`🛡 免除地租（踩中 ${owner.name} 的「${n.name}」）`);
       if (playMode === 'local' || p.peerId === peer.id) {
         await alertModal('免繳過路費', `您踏入了 <b>${owner.name}</b> 的「${n.name}」，本次地租全額免除！`);
       }
@@ -1603,6 +1645,7 @@ async function onProperty(p, n) {
     owner.cash += rent;
     
     log(`💸 <b>${p.name}</b> 支付給 <b>${owner.name}</b> 地租 $${fmt(rent)}（於「${n.name}」${isMonopoly(n) ? ' 👑壟斷加倍' : ''}）。`, '#f87171');
+    state.turnActions.push(`💸 支付地租 $${fmt(rent)} 給 ${owner.name}（於「${n.name}」）`);
     if (playMode === 'local' || p.peerId === peer.id) {
       await alertModal('支付過路費', `
         您踏入了 ${owner.name} 的地盤「<b>${n.name}</b>」（${HOUSE_LABEL[n.level]}）。<br>
@@ -1662,10 +1705,12 @@ async function onFate(p) {
   if (isHappyImmune && card.t === 'bad') {
     card = pool.find(c => c.t === 'good');
     log(`🎎 大福神庇佑！<b>${p.name}</b> 幸運免除了一起壞命運，改抽吉事。`, DEITIES.happy.color);
+    state.turnActions.push(`🎎 大福神庇佑，免除壞命運`);
   }
   
   const res = card.v();
   log(`🃏 <b>${p.name}</b> 抽到命運卡：${card.msg} -> ${res}`, '#a78bfa');
+  state.turnActions.push(`🃏 抽到命運卡：${card.msg} -> ${res}`);
   await alertModal('🃏 命運抽卡', `
     <b>${p.name}</b> 抽到了命運：<br>
     <div class="mt-2 text-md font-bold text-[#ffe08a]">「${card.msg}」</div>
@@ -1679,6 +1724,7 @@ async function onNews() {
   if (r === 0) {
     state.rateHikeTurns = 3;
     log(`📰 央行緊急宣布升息！銀行利率翻倍、購地建屋成本上漲 30%（持續 3 輪）。`, '#f59e0b');
+    state.turnActions.push(`📰 央行升息政策上路（持續3輪）`);
     await alertModal('📰 央行升息政策', '央行宣布實行升息：<br>· 銀行存款定期年利率<b>加倍</b><br>· 蓋房升級建造成本<b>上漲 30%</b><br>此政策將持續 3 輪。');
   } else if (r === 1) {
     state.players.forEach(p => {
@@ -1686,6 +1732,7 @@ async function onNews() {
     });
     state.inflationMult *= 1.1;
     log(`📰 央行啟動量化寬鬆（QE）！全員發放 $${fmt(inf(1200))} 現金，但通膨永久增加 10%。`, '#34d399');
+    state.turnActions.push(`📰 央行實施 QE 量化寬鬆，全員發放現金`);
     await alertModal('📰 量化寬鬆 (QE)', `政府啟動印鈔！全員獲得救濟金 <span class="mono text-[#34d399] font-bold">+$${fmt(inf(1200))}</span>。<br>但通膨乘數永久<b>上升 10%</b>。`);
   } else if (r === 2) {
     let c = 0;
@@ -1696,6 +1743,7 @@ async function onNews() {
       }
     });
     log(`📰 不動產泡沫化破裂！所有建築無條件下調 1 級（全場共降級 ${c} 處）。`, '#f87171');
+    state.turnActions.push(`📰 房地產泡沫化破裂，全場房屋降級`);
     await alertModal('📰 房產泡沫破裂', `不動產狂熱冷卻！場上所有玩家擁有的房屋等級，將<b>強制降級一級</b>（共影響 ${c} 棟建築）。`);
   } else if (r === 3) {
     let hit = 0;
@@ -1706,6 +1754,7 @@ async function onNews() {
     });
     if ($('stockPanel').style.display === 'flex') renderStock();
     log(`📰 金融海嘯突襲！所有股票集體跌停限制（共 ${hit} 檔跌停）。`, '#ff5d5d');
+    state.turnActions.push(`📰 金融海嘯席捲股市，全體股票跌停`);
     await alertModal('📰 黑天鵝全球股災', '所有上市股票集體跌停鎖死！有高額融資質押的玩家，請注意補足保證金。');
   } else {
     let hit = 0;
@@ -1716,6 +1765,7 @@ async function onNews() {
     });
     if ($('stockPanel').style.display === 'flex') renderStock();
     log(`📰 資金狂潮派對啟動！全員股票集體攻上漲停（共 ${hit} 檔漲停）。`, '#34d399');
+    state.turnActions.push(`📰 資金狂潮襲來，全體股票漲停`);
     await alertModal('📰 狂熱多頭資金潮', '熱錢鋪天蓋地而來！所有上市股票集體攻上漲停板！');
   }
   renderAll();
@@ -1726,6 +1776,7 @@ async function onBank(p) {
   const interest = Math.round(p.savings * baseRate);
   p.savings += interest;
   log(`🏦 <b>${p.name}</b> 獲得銀行定存利息 $${fmt(interest)}。`, '#f5c451');
+  state.turnActions.push(`🏦 定存利息入庫：$${fmt(interest)}`);
   
   const ans = await showChoice('🏦 中央銀行定存臨櫃', `
     定存利息結存入庫：<span class="mono text-[#34d399] font-bold">+$${fmt(interest)}</span>（年率 ${(baseRate * 100).toFixed(0)}%）<br>
@@ -1742,11 +1793,13 @@ async function onBank(p) {
     p.cash -= amt;
     p.savings += amt;
     log(`🏦 <b>${p.name}</b> 存入 $${fmt(amt)} 至定存帳戶。`, '#34d399');
+    state.turnActions.push(`🏦 存入定存：$${fmt(amt)}`);
   } else if (ans === 'wd') {
     const amt = Math.min(5000, p.savings);
     p.savings -= amt;
     p.cash += amt;
     log(`🏦 <b>${p.name}</b> 從帳戶提領了 $${fmt(amt)} 現金。`, '#f5c451');
+    state.turnActions.push(`🏦 提領現金：$${fmt(amt)}`);
   }
 }
 
@@ -1817,6 +1870,7 @@ function triggerInflation(reason) {
   state.inflationMult *= (1 + config.infRate / 100);
   state.inflationCount++;
   log(`🔥 全域惡性通膨爆發（因：${reason}）！物價乘數累計來到 ×${state.inflationMult.toFixed(2)}。`, '#ff5d5d');
+  state.turnActions.push(`🔥 通膨爆發（因：${reason}）`);
   showInflationAlert();
   renderAll();
 }
@@ -2059,6 +2113,7 @@ function tradeStock(type) {
     p.cash -= cost;
     p.stocks[s.ticker] = (p.stocks[s.ticker] || 0) + val;
     log(`📈 <b>${p.name}</b> 買進了 ${val} 股「${s.name}」（單價 $${fmt(s.price)}）。`, p.color);
+    state.turnActions.push(`📈 買進 ${val} 股「${s.name}」（單價 $${fmt(s.price)}）`);
   } 
   else if (type === 'sell') {
     const qty = p.stocks[s.ticker] || 0;
@@ -2071,6 +2126,7 @@ function tradeStock(type) {
     p.stocks[s.ticker] = qty - val;
     if (p.stocks[s.ticker] === 0) delete p.stocks[s.ticker];
     log(`📉 <b>${p.name}</b> 賣出了 ${val} 股「${s.name}」（單價 $${fmt(s.price)}），變現 $${fmt(earn)}。`, p.color);
+    state.turnActions.push(`📉 賣出 ${val} 股「${s.name}」（單價 $${fmt(s.price)}）`);
   } 
   else if (type === 'pledge') {
     const qty = p.stocks[s.ticker] || 0;
@@ -2088,6 +2144,7 @@ function tradeStock(type) {
     p.pledged[s.ticker].loan += loan;
     
     log(`🔒 <b>${p.name}</b> 將持有的 ${val} 股「${s.name}」進行質押，取得現金 $${fmt(loan)}。`, '#a78bfa');
+    state.turnActions.push(`🔒 質押 ${val} 股「${s.name}」借款 $${fmt(loan)}`);
   } 
   else if (type === 'redeem') {
     const pledged = p.pledged[s.ticker];
@@ -2104,6 +2161,7 @@ function tradeStock(type) {
     p.stocks[s.ticker] = (p.stocks[s.ticker] || 0) + pledged.shares;
     delete p.pledged[s.ticker];
     log(`🔓 <b>${p.name}</b> 還清定額本息 $${fmt(cost)}，成功贖回 ${pledged.shares} 股「${s.name}」。`, '#34d399');
+    state.turnActions.push(`🔓 贖回 ${pledged.shares} 股「${s.name}」`);
   }
   syncState();
   renderAll();
@@ -2128,6 +2186,7 @@ async function checkMarginCall(p) {
       delete p.pledged[tk];
       
       log(`⚠️ <b>${p.name}</b> 質押的「${s.name}」觸發斷頭！銀行將其強制平倉賣出還款，清結退回 $${fmt(remainder)}。`, '#f87171');
+      state.turnActions.push(`⚠️ 質押的「${s.name}」觸發強制斷頭平倉（退回 $${fmt(remainder)}）`);
       await alertModal('⚠️ 股票斷頭通知', `
         您質押的 <b>${s.name}</b> 因股價跌破臨界點，融資借款率高達 ${(ltv * 100).toFixed(1)}%。<br>
         銀行已對其進行<b>強制斷頭拋售平倉</b>：<br>
@@ -2149,6 +2208,7 @@ async function settleNegative(p) {
     
     if (!hasSavings && !hasStocks && !hasPledges && !hasProperties) {
       log(`💀 <b>${p.name}</b> 資不抵債且無任何餘額資產，宣告破產！`, '#f87171');
+      state.turnActions.push(`💀 資不抵債，宣告破產退出`);
       await alertModal('💀 破產宣告', `<b>${p.name}</b> 無法清償債務，正式破產退出遊戲！`);
       declareBankruptcy(p);
       return;
@@ -2170,6 +2230,7 @@ async function settleNegative(p) {
     
     if (choice === 'bankruptcy') {
       log(`💀 <b>${p.name}</b> 主動申報破產，退出戰局。`, '#f87171');
+      state.turnActions.push(`💀 宣告破產退出`);
       declareBankruptcy(p);
       return;
     }
@@ -2178,6 +2239,7 @@ async function settleNegative(p) {
       p.savings = 0;
       p.cash += amt;
       log(`🏦 <b>${p.name}</b> 提領了全部定存存款 $${fmt(amt)} 以償還透支。`, '#34d399');
+      state.turnActions.push(`🏦 提領定存還債：$${fmt(amt)}`);
     }
     else if (choice === 'sell_stock') {
       const tick = Object.keys(p.stocks).find(tk => p.stocks[tk] > 0);
@@ -2188,6 +2250,7 @@ async function settleNegative(p) {
         p.cash += earn;
         delete p.stocks[tick];
         log(`📉 <b>${p.name}</b> 被迫變賣了全部持股 ${qty} 股「${s.name}」，獲得 $${fmt(earn)}。`, '#f5c451');
+        state.turnActions.push(`📉 被迫變賣股票：${s.ticker} (${qty}股)`);
       }
     }
     else if (choice === 'sell_pledge') {
@@ -2200,6 +2263,7 @@ async function settleNegative(p) {
         p.cash += remainder;
         delete p.pledged[tick];
         log(`📉 <b>${p.name}</b> 被迫平倉質押部位以還債，清算後進帳 $${fmt(remainder)}。`, '#f87171');
+        state.turnActions.push(`📉 被迫平倉質押：${s.ticker}`);
       }
     }
     else if (choice === 'sell_property') {
@@ -2228,6 +2292,7 @@ async function settleNegative(p) {
 
 function declareBankruptcy(p) {
   p.alive = false;
+  state.turnActions.push(`💀 宣告破產，退出對局！`);
   p.cash = 0;
   p.savings = 0;
   p.points = 0;
@@ -2335,6 +2400,7 @@ function buyItem(itemKey) {
   p.points -= item.price;
   p.items.push(itemKey);
   log(`🛒 <b>${p.name}</b> 購買了一張「${item.name}」，花費了 ${item.price} PP。`, p.color);
+  state.turnActions.push(`🛒 購買道具卡「${item.name}」（花費 ${item.price} PP）`);
   
   syncState();
   renderItems();
@@ -2352,6 +2418,7 @@ async function useItem(itemKey, index) {
     p.items.splice(index, 1);
     closePanels();
     log(`🔥 <b>${p.name}</b> 使用了通膨加速卡！`, p.color);
+    state.turnActions.push(`⚡ 使用「通膨加速卡」`);
     triggerInflation('道具卡加速');
     await alertModal('🔥 全域通膨提前引爆', '市場受心理預期影響，<b>立即引爆了一輪通膨</b>！');
   } 
@@ -2360,6 +2427,7 @@ async function useItem(itemKey, index) {
     closePanels();
     state.freezeTurns = 5;
     log(`❄️ <b>${p.name}</b> 使用了經濟凍結卡！`, p.color);
+    state.turnActions.push(`⚡ 使用「經濟凍結卡」`);
     await alertModal('❄️ 經濟凍結生效', '調控有成！<b>未來 5 輪內物價將完全凍結不調漲</b>。');
   } 
   else if (itemKey === 'tsunami') {
@@ -2374,6 +2442,7 @@ async function useItem(itemKey, index) {
       const rival = state.players[targetId];
       rival.tsunamiTurns = 3;
       log(`🌊 <b>${p.name}</b> 對 <b>${rival.name}</b> 施放了金融海嘯！`, p.color);
+      state.turnActions.push(`⚡ 使用「金融海嘯卡」重創了 ${rival.name}`);
       await alertModal('🌊 金融海嘯成功登陸', `海嘯橫掃！<b>${rival.name}</b> 的所有地產在未來 3 回合內，租金收入將<b>減半</b>。`);
     }
   } 
@@ -2390,6 +2459,7 @@ async function useItem(itemKey, index) {
       p.items.splice(index, 1);
       closePanels();
       log(`🎯 <b>${p.name}</b> 使用遙控骰子前進 ${steps} 步。`, p.color);
+      state.turnActions.push(`⚡ 使用「遙控骰子」自選移動了 ${steps} 步`);
       await doRoll(steps);
     }
   } 
@@ -2573,6 +2643,7 @@ async function buildHouse(nodeId) {
   n.level++;
   n.lastActionRound = state.round; 
   log(`🏠 <b>${p.name}</b> 支付建造費 $${fmt(finalCost)}，將「${n.name}」升級至【${HOUSE_LABEL[n.level]}】。`, p.color);
+  state.turnActions.push(`🏠 升級「${n.name}」至【${HOUSE_LABEL[n.level]}】（費用 $${fmt(finalCost)}）`);
   
   syncState();
   renderBuild();
@@ -2691,6 +2762,14 @@ function hostOnlineRoom() {
         // 廣播最新大廳連線狀態給所有人
         syncLobbyData();
       } 
+      else if (data.type === 'LOBBY_UPDATE_REQUEST') {
+        const idx = onlinePlayers.findIndex(p => p.peerId === conn.peer);
+        if (idx !== -1) {
+          onlinePlayers[idx].name = data.name;
+          onlinePlayers[idx].icon = data.icon;
+          syncLobbyData();
+        }
+      }
       else if (data.type === 'STATE_SYNC_REQUEST') {
         // 房客同步資料過來，房主更新本地 state 並向所有人廣播
         if (state && data.state && data.state.inflationCount > state.inflationCount) {
@@ -2904,3 +2983,97 @@ async function openShopBuy(p) {
     openItems();
   }
 }
+
+/* =========================================================
+   回合行動簡報與左側即時狀態面板
+========================================================= */
+let sidebarOpen = true;
+
+function toggleSidebar() {
+  sidebarOpen = !sidebarOpen;
+  const sidebar = $('leftSidebar');
+  const expandBtn = $('sidebarExpandBtn');
+  const arrow = $('sidebarToggleArrow');
+  if (sidebarOpen) {
+    sidebar.style.display = 'flex';
+    expandBtn.classList.add('hidden');
+    arrow.textContent = '◀ 收合';
+  } else {
+    sidebar.style.display = 'none';
+    expandBtn.classList.remove('hidden');
+    arrow.textContent = '▶ 展開';
+  }
+}
+window.toggleSidebar = toggleSidebar;
+
+function renderSidebar() {
+  const container = $('sidebarContent');
+  if (!container || !state) return;
+  container.innerHTML = '';
+  
+  state.players.forEach(p => {
+    if (!p.alive) {
+      container.innerHTML += `
+        <div class="p-2 border border-[#26314a] rounded bg-[#0b0f17] opacity-50 flex items-center justify-between text-xs">
+          <div class="flex items-center gap-1.5">
+            <span class="pawn scale-90" style="border-color:${p.color}">${p.icon}</span>
+            <span class="font-bold text-[#f87171] line-through text-[11px]">${p.name}</span>
+          </div>
+          <span class="text-[10px] text-[#f87171] font-bold">破產</span>
+        </div>
+      `;
+      return;
+    }
+    
+    const isCurrent = state.players[state.current].id === p.id;
+    const itemsList = p.items.map(k => ITEMS[k] ? ITEMS[k].icon : '').join(' ');
+    const deityText = p.deity ? `<span class="deity-badge" style="background:${DEITIES[p.deity.type].color}; color:#111; padding: 1px 3px; font-size:9px; border-radius:3px;">${DEITIES[p.deity.type].icon}${DEITIES[p.deity.type].name.substring(0,2)}</span>` : '';
+    const tsunamiText = p.tsunamiTurns > 0 ? `<span class="text-[9px] text-[#60a5fa] border border-[#60a5fa] px-1 rounded shrink-0">🌊${p.tsunamiTurns}</span>` : '';
+    
+    container.innerHTML += `
+      <div class="p-2 border rounded flex flex-col gap-1.5 transition-all ${isCurrent ? 'border-[#f5c451] bg-[#1a2233] glow' : 'border-[#26314a] bg-[#121826]'}" style="border-left-width: 4px; border-left-color: ${p.color};">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1.5 overflow-hidden">
+            <span class="pawn scale-90 shrink-0" style="border-color:${p.color}">${p.icon}</span>
+            <span class="font-bold text-[11px] truncate text-[#e6edf7]">${p.name}</span>
+          </div>
+          <div class="flex gap-1 shrink-0">
+            ${deityText}
+            ${tsunamiText}
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-x-2 text-[10px] text-[#8a98b3]">
+          <div>現金: <span class="mono text-white">$${fmt(p.cash)}</span></div>
+          <div>點數: <span class="mono text-[#60a5fa]">${p.points} PP</span></div>
+          <div class="col-span-2 mt-1 truncate">卡片: ${itemsList || '<span class="text-[9px] text-[#55637d]">無卡片</span>'}</div>
+        </div>
+      </div>
+    `;
+  });
+}
+
+function showTurnBriefingModal(p, actions) {
+  const listHTML = actions.map(act => `<li class="mb-1.5 text-xs text-[#e6edf7] flex gap-2"><span>•</span><span>${act}</span></li>`).join('');
+  
+  $('modalBox').style.maxWidth = '460px';
+  $('modalBox').innerHTML = `
+    <div class="text-center mb-3">
+      <div class="display text-lg font-bold text-[#f5c451]">📢 ${p.icon} ${p.name} 的回合簡報</div>
+      <div class="text-[10px] text-[#8a98b3] mt-0.5">該玩家在上個回合中完成了以下行動：</div>
+    </div>
+    <div class="p-3 border border-[#26314a] bg-[#0b0f17] rounded-lg max-h-[220px] overflow-y-auto scroll mb-4">
+      <ul class="list-none p-0 m-0">
+        ${listHTML}
+      </ul>
+    </div>
+    <button class="btn btn-gold w-full py-2 text-xs font-bold display" onclick="closeBriefingModal()">
+      確認已讀
+    </button>
+  `;
+  $('modal').style.display = 'flex';
+}
+
+function closeBriefingModal() {
+  $('modal').style.display = 'none';
+}
+window.closeBriefingModal = closeBriefingModal;
