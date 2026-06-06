@@ -12,13 +12,16 @@
   --txt: #e6edf7;
   --muted: #8a98b3;
 }
+
 * {
   box-sizing: border-box;
 }
+
 html, body {
   margin: 0;
   height: 100%;
 }
+
 body {
   background:
     radial-gradient(1200px 700px at 80% -10%, rgba(245, 196, 81, 0.08), transparent 60%),
@@ -28,32 +31,40 @@ body {
   font-family: 'Noto Sans TC', 'Chakra Petch', sans-serif;
   overflow: hidden;
 }
+
 .display {
   font-family: 'Chakra Petch', 'Noto Sans TC', sans-serif;
   letter-spacing: 0.5px;
 }
+
 .mono {
   font-family: 'JetBrains Mono', monospace;
 }
+
 .card {
   background: linear-gradient(180deg, var(--panel), #0f1420);
   border: 1px solid var(--line);
   border-radius: 14px;
 }
+
 .scroll::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
+
 .scroll::-webkit-scrollbar-thumb {
   background: #2c3a58;
   border-radius: 8px;
 }
+
 .scroll::-webkit-scrollbar-track {
   background: transparent;
 }
+
 .glow {
   box-shadow: 0 0 0 1px rgba(245, 196, 81, 0.5), 0 0 22px rgba(245, 196, 81, 0.25);
 }
+
 .btn {
   transition: all 0.15s ease;
   border-radius: 10px;
@@ -61,17 +72,21 @@ body {
   cursor: pointer;
   user-select: none;
 }
+
 .btn:active {
   transform: translateY(1px);
 }
+
 .btn-gold {
   background: linear-gradient(180deg, var(--gold2), var(--gold));
   color: #3a2a00;
 }
+
 .btn-gold:hover {
   filter: brightness(1.07);
   box-shadow: 0 0 12px rgba(245, 196, 81, 0.3);
 }
+
 .btn-gold:disabled {
   background: #2c3440;
   color: #5a6475;
@@ -79,31 +94,38 @@ body {
   filter: none;
   box-shadow: none;
 }
+
 .btn-ghost {
   background: var(--panel2);
   border: 1px solid var(--line);
   color: var(--txt);
 }
+
 .btn-ghost:hover {
   border-color: var(--gold);
   background: rgba(245, 196, 81, 0.05);
 }
+
 .btn-red {
   background: linear-gradient(180deg, #ff8a8a, #ef4444);
   color: #3a0000;
 }
+
 .btn-red:hover {
   filter: brightness(1.07);
   box-shadow: 0 0 12px rgba(239, 68, 68, 0.3);
 }
+
 .btn-green {
   background: linear-gradient(180deg, #6ee7b7, #10b981);
   color: #06241a;
 }
+
 .btn-green:hover {
   filter: brightness(1.07);
   box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
 }
+
 .overlay {
   position: fixed;
   inset: 0;
@@ -115,9 +137,11 @@ body {
   justify-content: center;
   padding: 18px;
 }
+
 .pop {
   animation: pop 0.22s ease-out;
 }
+
 @keyframes pop {
   from {
     transform: scale(0.92);
@@ -128,15 +152,18 @@ body {
     opacity: 1;
   }
 }
+
 @keyframes flash {
   0% { opacity: 0; transform: scale(0.95); }
   15% { opacity: 1; transform: scale(1); }
   85% { opacity: 1; transform: scale(1); }
   100% { opacity: 0; transform: scale(0.95); }
 }
+
 .inflation-flash {
   animation: flash 1.8s forwards ease-in-out;
 }
+
 .die {
   width: 68px;
   height: 68px;
@@ -150,6 +177,7 @@ body {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
   user-select: none;
 }
+
 .pip {
   background: #111;
   border-radius: 50%;
@@ -159,31 +187,37 @@ body {
   height: 12px;
   visibility: hidden;
 }
+
 @keyframes roll {
   0% { transform: rotate(0deg) scale(1); }
   50% { transform: rotate(180deg) scale(1.15); }
   100% { transform: rotate(360deg) scale(1); }
 }
+
 .rolling {
   animation: roll 0.5s ease-in-out;
 }
+
 .chip {
   font-size: 11px;
   padding: 3px 8px;
   border-radius: 999px;
   border: 1px solid var(--line);
 }
+
 .timerbar {
   height: 8px;
   border-radius: 999px;
   background: #202a40;
   overflow: hidden;
 }
+
 .timerfill {
   height: 100%;
   background: linear-gradient(90deg, var(--green), var(--gold));
   transition: width 0.25s linear;
 }
+
 .deity-badge {
   font-size: 11px;
   padding: 2px 7px;
@@ -193,9 +227,11 @@ body {
   align-items: center;
   gap: 2px;
 }
+
 input[type=number], input[type=text] {
   font-family: 'JetBrains Mono', 'Noto Sans TC', sans-serif;
 }
+
 .seg {
   background: var(--panel2);
   border: 1px solid var(--line);
@@ -205,10 +241,12 @@ input[type=number], input[type=text] {
   color: var(--txt);
   transition: border-color 0.15s ease;
 }
+
 .seg:focus {
   outline: none;
   border-color: var(--gold);
 }
+
 .log-line {
   border-left: 3px solid var(--line);
   padding: 4px 10px;
@@ -218,6 +256,7 @@ input[type=number], input[type=text] {
   background: rgba(38, 49, 74, 0.15);
   border-radius: 0 6px 6px 0;
 }
+
 /* 地圖樣式 */
 #mapViewport {
   position: absolute;
@@ -228,15 +267,18 @@ input[type=number], input[type=text] {
     radial-gradient(1200px 800px at 30% 20%, rgba(96, 165, 250, 0.07), transparent 60%),
     radial-gradient(1000px 700px at 80% 80%, rgba(245, 196, 81, 0.06), transparent 60%);
 }
+
 #mapViewport.dragging {
   cursor: grabbing;
 }
+
 #mapWorld {
   position: absolute;
   left: 0;
   top: 0;
   transform-origin: 0 0;
 }
+
 .mnode {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -250,35 +292,42 @@ input[type=number], input[type=text] {
   user-select: none;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
+
 .mnode .bar {
   height: 7px;
   border-radius: 3px;
   margin-bottom: 6px;
 }
+
 .mnode .nname {
   font-size: 17px;
   font-weight: 800;
   line-height: 1.2;
 }
+
 .mnode .nmeta {
   font-size: 13.5px;
   color: var(--muted);
   margin-top: 3px;
 }
+
 .mnode .ngrp {
   font-size: 12px;
   font-weight: 700;
   margin-top: 3px;
 }
+
 .mnode.hl {
   outline: 2px solid var(--gold);
   box-shadow: 0 0 20px rgba(245, 196, 81, 0.65);
   transform: translate(-50%, -50%) scale(1.08);
   z-index: 10;
 }
+
 .mnode.fork {
   border-color: var(--gold);
 }
+
 .pawn {
   width: 24px;
   height: 24px;
@@ -293,6 +342,7 @@ input[type=number], input[type=text] {
   background: #ffffff;
   color: #0b0f17;
 }
+
 .mapbtn {
   width: 44px;
   height: 44px;
@@ -303,6 +353,7 @@ input[type=number], input[type=text] {
   font-weight: 800;
   font-size: 18px;
 }
+
 .pcount {
   width: 48px;
   height: 48px;
@@ -316,17 +367,20 @@ input[type=number], input[type=text] {
   font-family: 'JetBrains Mono', monospace;
   transition: all 0.15s ease;
 }
+
 .pcount.active {
   background: linear-gradient(180deg, var(--gold2), var(--gold));
   color: #3a2a00;
   border-color: var(--gold);
 }
+
 /* 股票走勢小圖 */
 .sparkline {
   display: block;
   width: 100px;
   height: 24px;
 }
+
 /* 撲克牌樣式 */
 .poker-card {
   width: 80px;
