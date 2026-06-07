@@ -120,6 +120,7 @@ let guestConnections = [];  // Host 用：連接到 Guest 的連線清單
 let onlinePlayers = [];     // 儲存連線中玩家資訊 { peerId, name, icon }
 let lastActiveTurnIndex = -1;
 let gameEnded = false;
+let clientCurrentTurn = -1;
 
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -592,6 +593,7 @@ function startGame() {
 
     if (playMode === 'online') {
       lastActiveTurnIndex = -1;
+      clientCurrentTurn = -1;
       checkTurnTransition();
     } else {
       beginTurn();
@@ -738,6 +740,7 @@ function startGame() {
   // 線上模式：依回合歸屬決定由哪一端開始行動，避免房主代替他人行動
   if (playMode === 'online') {
     lastActiveTurnIndex = -1;
+    clientCurrentTurn = -1;
     checkTurnTransition();
   } else {
     beginTurn();
@@ -3503,8 +3506,11 @@ function isMyTurn() {
 
 function checkTurnTransition() {
   if (playMode !== 'online' || !state) return;
-  if (state.current !== lastActiveTurnIndex) {
-    lastActiveTurnIndex = state.current;
+  if (state.current !== clientCurrentTurn) {
+    if (clientCurrentTurn !== -1) {
+      lastActiveTurnIndex = clientCurrentTurn;
+    }
+    clientCurrentTurn = state.current;
     const p = curPlayer();
     if (p && (peer && p.peerId === peer.id)) {
       console.log("My turn started! Calling beginTurn().");
@@ -4040,6 +4046,7 @@ function joinOnlineRoom() {
         log('🎮 房主已啟動戰局！線上對戰正式開始！', 'var(--gold)');
         
         lastActiveTurnIndex = -1;
+        clientCurrentTurn = -1;
         checkTurnTransition();
       }
       else if (data.type === 'STATE_SYNC') {
@@ -4075,6 +4082,7 @@ function joinOnlineRoom() {
         }));
         
         lastActiveTurnIndex = -1;
+        clientCurrentTurn = -1;
         checkTurnTransition();
       }
       else if (data.type === 'FORCE_GAME_OVER') {
@@ -4570,6 +4578,7 @@ function autoReconnectBtn() {
           log('🔌 房主已恢復戰局！線上連線同步成功！', 'var(--gold)');
           
           lastActiveTurnIndex = -1;
+          clientCurrentTurn = -1;
           checkTurnTransition();
         }
         else if (data.type === 'STATE_SYNC') {
@@ -4605,6 +4614,7 @@ function autoReconnectBtn() {
           }));
           
           lastActiveTurnIndex = -1;
+          clientCurrentTurn = -1;
           checkTurnTransition();
         }
         else if (data.type === 'FORCE_GAME_OVER') {
