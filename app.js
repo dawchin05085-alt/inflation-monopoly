@@ -50,7 +50,11 @@ const PROP_NAMES = [
   '夜市攤位', '文創小店', '捷運商圈', '海濱別墅', '科技園區', '金融中心', '觀光飯店', '工業廠房',
   '購物商場', '半導體廠', '私人島嶼', '太空基地', '溫泉會館', '遊艇碼頭', '電競館', '雲端機房',
   '釀酒莊園', '賽車場', '美術館', '摩天輪', '數據中心', '綠能電廠', '時尚精品', '百貨總店',
-  '晶片大樓', '星光劇院', '風力電網', '生技藥廠', '國際自貿區', '深海油田', '賽車賽道', '物流園區'
+  '晶片大樓', '星光劇院', '風力電網', '生技藥廠', '國際自貿區', '深海油田', '賽車賽道', '物流園區',
+  '文創園區', '生鮮超市', '影城影院', '高鐵特區', '生技大樓', '風力發電', '智慧農場', '水產市場',
+  '運動園區', '電子街', '軟體園區', '精品旅館', '免稅商店', '郵輪碼頭', '綠色社區', '算力中心',
+  '太空發射場', '深海鑽探船', '物流總部', '國際展覽館', '影音基地', '元宇宙中心', '自動化廠房', '低軌衛星基地',
+  '文藝復興特區', '大健康醫療', '新能研發中心', '國際會議中心', '金融總部大樓', 'AI晶片研發所', '保稅物流中心', '無人機基地'
 ];
 
 /* 角色 ICON 清單 */
@@ -347,9 +351,9 @@ function addEdge(a, b) {
 
 function buildMap() {
   MAP = { nodes: [], adj: {} };
-  // 保持寬廣拉伸的矩形空間，使大卡牌之間不重疊
-  const rect = { x: 4000, y: 4000, w: 33600, h: 22000 };
-  const R = 38;
+  // 保持寬廣拉伸的矩形空間，座標長寬翻倍，確保大卡牌間隔均勻不重疊
+  const rect = { x: 4000, y: 4000, w: 67200, h: 44000 };
+  const R = 76;
   for (let i = 0; i < R; i++) {
     const pt = ptOnRect(i / R, rect);
     MAP.nodes.push({ id: i, x: pt.x, y: pt.y, kind: 'ring', ringNext: (i + 1) % R });
@@ -357,10 +361,10 @@ function buildMap() {
   for (let i = 0; i < R; i++) addEdge(i, (i + 1) % R);
 
   const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
-  // 中央賭場 (ID 40)
-  MAP.nodes.push({ id: 40, x: cx, y: cy, kind: 'bridge' });
+  // 中央賭場 (ID 80)
+  MAP.nodes.push({ id: 80, x: cx, y: cy, kind: 'bridge' });
 
-  let nid = 41; // 新分支節點起始 id
+  let nid = 81; // 新分支節點起始 id
   // 直線路鏈：a —(count 個中繼節點)— b
   function chain(aId, bId, count, kind) {
     const a = nodeById(aId), b = nodeById(bId);
@@ -401,26 +405,26 @@ function buildMap() {
     return ids;
   }
 
-  // 十字路網（皆經過中央捷徑 40），每個 3 個中繼節點
-  const brN = chain(6, 40, 3, 'bridge');
-  const brS = chain(40, 25, 3, 'bridge');
-  const brW = chain(34, 40, 3, 'bridge');
-  const brE = chain(40, 15, 3, 'bridge');
+  // 十字路網（皆經過中央捷徑 80），每個 3 個中繼節點
+  const brN = chain(12, 80, 3, 'bridge');
+  const brS = chain(80, 50, 3, 'bridge');
+  const brW = chain(68, 80, 3, 'bridge');
+  const brE = chain(80, 30, 3, 'bridge');
 
-  // 四角外圍繞道，沿弧線大幅向外凸出，做為轉運角點旁路
-  const dNE = chainArc(10, 12, 3, 'detour', 22800);
-  const dSE = chainArc(18, 20, 3, 'detour', 22800);
-  const dSW = chainArc(28, 30, 3, 'detour', 22800);
-  const dNW = chainArc(36, 0, 1, 'detour', 18000);
+  // 四角外圍繞道，沿弧線大幅向外凸出，做為轉運角點旁路 (bulge 值翻倍)
+  const dNE = chainArc(20, 24, 3, 'detour', 45600);
+  const dSE = chainArc(36, 40, 3, 'detour', 45600);
+  const dSW = chainArc(56, 60, 3, 'detour', 45600);
+  const dNW = chainArc(72, 0, 1, 'detour', 36000);
 
-  // 外環特殊格
+  // 外環特殊格 (索引全部翻倍以擴充棋盤)
   const spec = {
-    0: 'start', 2: 'fate', 4: 'news', 6: 'plaza', 10: 'plaza',
-    11: 'bank', 12: 'plaza', 13: 'jail', 15: 'plaza', 17: 'fate',
-    18: 'plaza', 19: 'news', 20: 'plaza', 25: 'plaza',
-    27: 'stock', 28: 'plaza', 30: 'plaza', 32: 'shop', 34: 'plaza', 36: 'plaza'
+    0: 'start', 4: 'fate', 8: 'news', 12: 'plaza', 20: 'plaza',
+    22: 'bank', 24: 'plaza', 26: 'jail', 30: 'plaza', 34: 'fate',
+    36: 'plaza', 38: 'news', 40: 'plaza', 50: 'plaza',
+    54: 'stock', 56: 'plaza', 60: 'plaza', 64: 'shop', 68: 'plaza', 72: 'plaza'
   };
-  const forks = new Set([6, 10, 15, 18, 25, 28, 34, 36]);
+  const forks = new Set([12, 20, 24, 30, 36, 40, 50, 56, 60, 68, 72]);
 
   // 分支（橋／繞道）節點輪流給予事件/商店/股市型別，減少一半功能格，換成一般地產
   const branchCycle = ['fate', 'property', 'news', 'property', 'fate', 'shop', 'news', 'stock'];
@@ -433,20 +437,21 @@ function buildMap() {
       n.name = { fate: '命運', news: '新聞快報', shop: '道具商店', stock: '證券交易所' }[t];
     }
   });
-  // 賭場型別 (中央節點 ID 40)
-  const casino = nodeById(40);
+  // 賭場型別 (中央節點 ID 80)
+  const casino = nodeById(80);
   casino.type = 'casino';
   casino.name = '拉斯維加斯賭場';
 
+  // 八大社區分組，總地產規模擴大兩倍，單組容納個數按比例調增，維持 contiguous 分佈
   const GROUPS = [
-    { name: '老城商圈', color: '#a16207', size: 3 },
-    { name: '濱海特區', color: '#0e7490', size: 3 },
-    { name: '科技走廊', color: '#1d4ed8', size: 4 },
-    { name: '金融大道', color: '#b45309', size: 3 },
-    { name: '工業重鎮', color: '#4d7c0f', size: 3 },
-    { name: '觀光勝地', color: '#be185d', size: 3 },
-    { name: '頂級地段', color: '#7c3aed', size: 4 },
-    { name: '新興開發', color: '#0f766e', size: 3 },
+    { name: '老城商圈', color: '#a16207', size: 7 },
+    { name: '濱海特區', color: '#0e7490', size: 7 },
+    { name: '科技走廊', color: '#1d4ed8', size: 9 },
+    { name: '金融大道', color: '#b45309', size: 7 },
+    { name: '工業重鎮', color: '#4d7c0f', size: 7 },
+    { name: '觀光勝地', color: '#be185d', size: 7 },
+    { name: '頂級地段', color: '#7c3aed', size: 9 },
+    { name: '新興開發', color: '#0f766e', size: 7 },
   ];
 
   const SPECIAL_NAMES = [
@@ -457,7 +462,11 @@ function buildMap() {
     { name: '特許重工廠區', type: 'cash' },
     { name: '特許星鏈衛星', type: 'points' },
     { name: '特許高鐵軌道', type: 'cash' },
-    { name: '特許元宇宙中心', type: 'points' }
+    { name: '特許元宇宙中心', type: 'points' },
+    { name: '特許智能算力港', type: 'cash' },
+    { name: '特許基因庫中心', type: 'points' },
+    { name: '特許低軌太空站', type: 'cash' },
+    { name: '特許超導電網', type: 'points' }
   ];
   let specIdx = 0;
 
@@ -694,7 +703,7 @@ function startGame() {
       savings: config.save,
       points: config.points,
       node: 0,
-      from: 37, 
+      from: 75, 
       stocks: {},
       pledged: {},
       tradeLog: [], // 股票交易紀錄
@@ -1508,7 +1517,7 @@ function alertModal(t, h) {
    回合流程
 ========================================================= */
 async function beginTurn() {
-  const p = curPlayer();
+  let p = curPlayer();
   if (!p.alive) return endTurn();
   
   // 1. 離線玩家託管處理 (線上模式且我們是房主)
@@ -1534,6 +1543,7 @@ async function beginTurn() {
     
     setTimeout(async () => {
       rolledThisTurn = true;
+      p = state.players[p.id];
       const dc = p.diceCount || 1;
       let steps = 0;
       for (let d = 0; d < dc; d++) steps += rnd(1, 6);
@@ -1543,8 +1553,11 @@ async function beginTurn() {
       await animateDie(steps);
       state.turnActions.push(`🎲 (自動託管) 擲出 ${steps} 點`);
       
+      p = state.players[p.id];
       await walk(p, steps);
+      p = state.players[p.id];
       await resolveNode(p);
+      p = state.players[p.id];
       if (p.cash < 0) await settleNegative(p);
       
       busy = false;
@@ -1609,30 +1622,35 @@ async function beginTurn() {
     }
   }
   
-  // 質押斷頭檢查
   if (playMode === 'local' || (peer && p.peerId === peer.id)) {
+    p = state.players[p.id];
     await checkMarginCall(p);
   }
   
+  p = state.players[p.id];
   // 窮神扣錢
   if (hasDeity(p, 'poor')) {
     const drain = inf(p.deity.big ? 1500 : 400);
     p.cash -= drain;
     log(`🪙 <b>${p.name}</b> 被窮神財氣糾纏，損失現金 $${fmt(drain)}。`, DEITIES.poor.color);
     if (p.cash < 0 && (playMode === 'local' || (peer && p.peerId === peer.id))) {
+      p = state.players[p.id];
       await settleNegative(p);
     }
   }
   
+  p = state.players[p.id];
   renderAll();
   
   if (p.skip) {
     p.skip = false;
     $('centerMsg').textContent = `${p.name} 本回合暫停中`;
     await alertModal('暫停回合', `<b>${p.name}</b> 目前正在監獄/休息，本回合必須暫停一次。`);
+    p = state.players[p.id];
     return endTurn();
   }
   
+  p = state.players[p.id];
   if (!p.alive) return endTurn();
   
   if (playMode === 'local' || (peer && p.peerId === peer.id)) {
@@ -1758,13 +1776,13 @@ async function walk(p, steps) {
       updateMap();
       break;
     }
-    
     if (!state.auto) {
       updateMap();
       recenter();
       await sleep(140);
     }
   }
+  p = state.players[p.id];
   p.from = from;
   
   if (hasDeity(p, 'fortune') && p.deity.big) {
@@ -2349,7 +2367,9 @@ function rentDue(payer, owner, n) {
 
 /* 變賣資產籌錢：讓玩家賣股票/提定存/平倉質押，直到湊到 target 現金或自行停止 */
 async function raiseFunds(p, target) {
+  p = state.players[p.id];
   while (p.cash < target) {
+    p = state.players[p.id];
     const hasSavings = p.savings > 0;
     const stockTickers = Object.keys(p.stocks).filter(tk => getStockQty(p, tk) > 0);
     const hasStocks = stockTickers.length > 0;
@@ -2358,6 +2378,7 @@ async function raiseFunds(p, target) {
 
     if (!hasSavings && !hasStocks && !hasPledges) {
       await alertModal('已無可變賣資產', `您已沒有定存或股票可變賣，目前現金 $${fmt(p.cash)}。`);
+      p = state.players[p.id];
       return;
     }
 
@@ -2368,6 +2389,7 @@ async function raiseFunds(p, target) {
     options.push({ label: `停止籌錢`, value: 'stop', cls: 'btn-ghost' });
 
     const choice = await showChoice('💰 變賣資產籌錢', `目標金額 <b class="text-[#f5c451]">$${fmt(target)}</b>，目前現金 $${fmt(p.cash)}，還差 <b class="text-[#f87171]">$${fmt(target - p.cash)}</b>。<br>請選擇要變賣的資產：`, options);
+    p = state.players[p.id];
     if (choice === 'stop' || choice === undefined) return;
 
     if (choice === 'withdraw') {
@@ -2384,6 +2406,7 @@ async function raiseFunds(p, target) {
       });
       buttons.push({ label: '返回', value: null, cls: 'btn-ghost' });
       const tk = await showChoice('📉 選擇要賣出的股票', '將整筆持股一次賣出變現：', buttons);
+      p = state.players[p.id];
       if (tk) {
         const s = state.stocks.find(x => x.ticker === tk);
         const qty = getStockQty(p, tk);
@@ -2417,6 +2440,7 @@ async function raiseFunds(p, target) {
 }
 
 async function onProperty(p, n) {
+  p = state.players[p.id];
   const isActing = (playMode === 'local' || (peer && p.peerId === peer.id));
   if (n.owner !== null && n.owner !== p.id && hasDeity(p, 'land') && p.deity.big) {
     const old = state.players[n.owner];
@@ -2452,14 +2476,17 @@ async function onProperty(p, n) {
         { label: '💰 變賣資產籌錢', value: true, cls: 'btn-gold' },
         { label: '放棄認購', value: false, cls: 'btn-ghost' }
       ]);
+      p = state.players[p.id];
       if (wantRaise) {
         await raiseFunds(p, cost);
+        p = state.players[p.id];
       }
     }
 
     // 籌錢後仍不足 → 放棄
     if (p.cash < cost) {
       await alertModal('資金仍不足', `現金仍不足以購買「${n.name}」（需 $${fmt(cost)}，現有 $${fmt(p.cash)}），本次放棄認購。`);
+      p = state.players[p.id];
       return;
     }
 
@@ -2473,6 +2500,7 @@ async function onProperty(p, n) {
       { label: '確認購買', value: true, cls: 'btn-gold' },
       { label: '放棄認購', value: false, cls: 'btn-ghost' }
     ]);
+    p = state.players[p.id];
 
     if (ans) {
       p.cash -= cost;
@@ -2485,14 +2513,17 @@ async function onProperty(p, n) {
         log(`👑 <b>${p.name}</b> 壟斷「${n.groupName}」整段，地租加倍！`, n.groupColor);
         state.turnActions.push(`👑 達成「${n.groupName}」路段壟斷`);
         await alertModal('👑 區域壟斷成功！', `恭喜！您已壟斷「<b>${n.groupName}</b>」的所有地產！<br>該區地租已<b>翻倍</b>。`);
+        p = state.players[p.id];
       }
     }
   } else if (n.owner === p.id) {
     if (isActing) {
       if (n.level >= 4) {
         await alertModal('自持地產', `這是您的「${n.name}」（${HOUSE_LABEL[n.level]}），已達地標上限，無法再升級。`);
+        p = state.players[p.id];
       } else if (n.lastActionRound === state.round) {
         await alertModal('自持地產', `這是您的「${n.name}」（${HOUSE_LABEL[n.level]}），本輪已升級過，無法再升級。`);
+        p = state.players[p.id];
       } else {
         const ans = await showChoice('🏠 踩到自家地產', `
           您踏上自己的「<b>${n.name}</b>」（目前 ${HOUSE_LABEL[n.level]}）。<br>
@@ -2501,6 +2532,7 @@ async function onProperty(p, n) {
           { label: `🔨 免費升級為 ${HOUSE_LABEL[n.level + 1]}`, value: true, cls: 'btn-gold' },
           { label: '維持現狀', value: false, cls: 'btn-ghost' }
         ]);
+        p = state.players[p.id];
         if (ans) {
           n.level++;
           n.lastActionRound = state.round;
@@ -2508,6 +2540,7 @@ async function onProperty(p, n) {
           state.turnActions.push(`🏠 踩到自家地產，免費升級「${n.name}」為 ${HOUSE_LABEL[n.level]}`);
           renderAll();
           await alertModal('🏠 免費升級完成', `「${n.name}」已免費升級為 <b>${HOUSE_LABEL[n.level]}</b>！`);
+          p = state.players[p.id];
         }
       }
     }
@@ -2542,6 +2575,7 @@ async function onProperty(p, n) {
 }
 
 async function onFate(p) {
+  p = state.players[p.id];
   const isHappyImmune = p.deity && p.deity.type === 'happy' && p.deity.big;
   
   const catEvents = [
@@ -2564,7 +2598,86 @@ async function onFate(p) {
     { t: 'good', msg: '收到聖誕老人的神秘禮物卡！', v: () => { const it = pick(Object.keys(ITEMS)); p.items.push(it); return `獲得道具卡：${ITEMS[it].icon} ${ITEMS[it].name}`; } },
     { t: 'bad', msg: '收到國稅局補繳所得稅通知單。', v: () => { const g = inf(900); p.cash -= g; return `扣除現金 $${fmt(g)}`; } },
     { t: 'bad', msg: '突發急性腸胃炎，自費住院醫療。', v: () => { const g = inf(800); p.cash -= g; return `扣除現金 $${fmt(g)}`; } },
-    { t: 'bad', msg: '國際大宗物資飆漲，全域通膨急劇加速！', v: () => { triggerInflation('命運：通膨急遽上升'); return `提前觸發全域通膨！`; } }
+    { t: 'bad', msg: '國際大宗物資飆漲，全域通膨急劇加速！', v: () => { triggerInflation('命運：通膨急遽上升'); return `提前觸發全域通膨！`; } },
+    { t: 'good', msg: '央行宣佈採取緊縮貨幣政策以平抑物價！', v: () => { state.inflationMult = Math.max(1.0, state.inflationMult * 0.9); return `全域通膨乘數降溫 10%！目前通膨為 ×${state.inflationMult.toFixed(2)}`; } },
+    { t: 'good', msg: '政府強力調控基本民生物資價格！', v: () => { state.inflationMult = Math.max(1.0, state.inflationMult * 0.5); return `全域通膨乘數降溫 50%！目前通膨為 ×${state.inflationMult.toFixed(2)}`; } },
+    { t: 'good', msg: '獲得高鐵無限次搭乘體驗券，快速環遊世界走一圈！', v: () => {
+        const pay = inf(SALARY_BASE);
+        p.cash += pay;
+        p.points += config.gainStart;
+        let bonusAmt = 0;
+        let bonusPoints = 0;
+        MAP.nodes.forEach(nNode => {
+          if (nNode.isSpecial && nNode.owner === p.id) {
+            if (nNode.specialType === 'cash') {
+              bonusAmt += Math.round(500 * (1 + nNode.level * 0.6) * state.inflationMult);
+            } else if (nNode.specialType === 'points') {
+              bonusPoints += 15 + nNode.level * 8;
+            }
+          }
+        });
+        p.cash += bonusAmt;
+        p.points += bonusPoints;
+        let rText = `獲得起點過路工資 $${fmt(pay)} 與 ${config.gainStart} 點數`;
+        if (bonusAmt > 0 || bonusPoints > 0) {
+          rText += `，外加您的特許事業分紅計 $${fmt(bonusAmt)} 現金與 ${bonusPoints} 點數`;
+        }
+        return rText;
+      }
+    },
+    { t: 'good', msg: '幸運抽中頭等艙機票，直接前進至起點！', v: () => {
+        p.node = 0;
+        p.from = 75;
+        const pay = inf(SALARY_BASE);
+        p.cash += pay;
+        p.points += config.gainStart;
+        let bonusAmt = 0;
+        let bonusPoints = 0;
+        MAP.nodes.forEach(nNode => {
+          if (nNode.isSpecial && nNode.owner === p.id) {
+            if (nNode.specialType === 'cash') {
+              bonusAmt += Math.round(500 * (1 + nNode.level * 0.6) * state.inflationMult);
+            } else if (nNode.specialType === 'points') {
+              bonusPoints += 15 + nNode.level * 8;
+            }
+          }
+        });
+        p.cash += bonusAmt;
+        p.points += bonusPoints;
+        let rText = `傳送至起點！獲得起點工資 $${fmt(pay)} 與 ${config.gainStart} 點數`;
+        if (bonusAmt > 0 || bonusPoints > 0) {
+          rText += `，外加特許事業分紅 $${fmt(bonusAmt)} 現金與 ${bonusPoints} 點數`;
+        }
+        return rText;
+      }
+    },
+    { t: 'bad', msg: '因涉嫌違反內線交易法規，被檢調約談，直接坐牢拘留！', v: () => {
+        p.node = 26;
+        p.skip = true;
+        return `傳送至監獄/休息處，下回合暫停一次。`;
+      }
+    },
+    { t: 'good', msg: '持有的上市公司公佈獲利配息，銀行發放股票股利！', v: () => {
+        let totalStockVal = 0;
+        Object.keys(p.stocks || {}).forEach(ticker => {
+          const qty = getStockQty(p, ticker);
+          const s = state.stocks.find(x => x.ticker === ticker);
+          if (s && qty > 0) {
+            totalStockVal += qty * s.price;
+          }
+        });
+        const div = Math.round(totalStockVal * 0.05);
+        p.cash += div;
+        return `持股總市值 $${fmt(totalStockVal)}，配發 5% 現金股利計 $${fmt(div)}`;
+      }
+    },
+    { t: 'bad', msg: '政府實施都市更新與安全檢修條例，需繳納房屋修繕費！', v: () => {
+        const val = landAsset(p);
+        const cost = Math.round(val * 0.1);
+        p.cash -= cost;
+        return `您的名下房地產總估值為 $${fmt(val)}，需繳納 10% 房屋修繕稅費計 $${fmt(cost)}`;
+      }
+    }
   ];
   
   let card;
@@ -2590,6 +2703,7 @@ async function onFate(p) {
   }
   
   const res = card.v();
+  p = state.players[p.id];
   log(`🃏 <b>${p.name}</b> 抽到命運卡：${card.msg} -> ${res}`, '#a78bfa');
   state.turnActions.push(`🃏 抽到命運卡：${card.msg} -> ${res}`);
   await alertModal('🃏 命運抽卡', `
@@ -2597,7 +2711,11 @@ async function onFate(p) {
     <div class="mt-2 text-md font-bold text-[#ffe08a]">「${card.msg}」</div>
     <div class="mt-1 text-sm text-[#e6edf7]">${res}</div>
   `);
-  if (p.cash < 0) await settleNegative(p);
+  p = state.players[p.id];
+  if (p.cash < 0) {
+    await settleNegative(p);
+    p = state.players[p.id];
+  }
 }
 
 async function onNews() {
@@ -3218,9 +3336,12 @@ function tradeStock(type) {
    股票斷頭追繳與負債處理
 ========================================================= */
 async function checkMarginCall(p) {
+  p = state.players[p.id];
   const tickers = Object.keys(p.pledged);
   for (const tk of tickers) {
+    p = state.players[p.id];
     const pledged = p.pledged[tk];
+    if (!pledged) continue;
     const s = state.stocks.find(x => x.ticker === tk);
     if (!s) continue;
     
@@ -3241,13 +3362,19 @@ async function checkMarginCall(p) {
         · 償還貸款：-$${fmt(pledged.loan)}<br>
         · 清算後${remainder >= 0 ? `退回您的現金：<span class="text-[#34d399] font-bold">+$${fmt(remainder)}</span>` : `您需補足的差額：<span class="text-[#f87171] font-bold">-$${fmt(Math.abs(remainder))}</span>`}
       `);
-      if (p.cash < 0) await settleNegative(p);
+      p = state.players[p.id];
+      if (p.cash < 0) {
+        await settleNegative(p);
+        p = state.players[p.id];
+      }
     }
   }
 }
 
 async function settleNegative(p) {
+  p = state.players[p.id];
   while (p.cash < 0 && p.alive) {
+    p = state.players[p.id];
     const hasSavings = p.savings > 0;
     const hasStocks = Object.keys(p.stocks).some(tk => getStockQty(p, tk) > 0);
     const hasPledges = Object.keys(p.pledged).length > 0;
@@ -3257,6 +3384,7 @@ async function settleNegative(p) {
       log(`💀 <b>${p.name}</b> 資不抵債且無任何餘額資產，宣告破產！`, '#f87171');
       state.turnActions.push(`💀 資不抵債，宣告破產退出`);
       await alertModal('💀 破產宣告', `<b>${p.name}</b> 無法清償債務，正式破產退出遊戲！`);
+      p = state.players[p.id];
       declareBankruptcy(p);
       return;
     }
@@ -3274,6 +3402,7 @@ async function settleNegative(p) {
       `您現金透支了：<span class="mono text-[#f87171] font-bold">-$${fmt(Math.abs(p.cash))}</span>。<br>請變賣以下資產以償還赤字本息：`,
       options
     );
+    p = state.players[p.id];
     
     if (choice === 'bankruptcy') {
       log(`💀 <b>${p.name}</b> 主動申報破產，退出戰局。`, '#f87171');
@@ -5318,14 +5447,16 @@ async function handleOfflineActivePlayer(idx) {
   stopTimer();
   closePanels();
   
-  const p = state.players[idx];
+  let p = state.players[idx];
   log(`🤖 [系統] 正在為中途斷線的玩家 <b>${p.name}</b> 託管並結束回合...`, '#8a98b3');
   
   if (!rolledThisTurn && !busy) {
     await doRoll();
+    p = state.players[idx];
     if (p.cash < 0) await settleNegative(p);
     setTimeout(endTurn, 1000);
   } else if (rolledThisTurn && !busy) {
+    p = state.players[idx];
     if (p.cash < 0) await settleNegative(p);
     setTimeout(endTurn, 1000);
   }
