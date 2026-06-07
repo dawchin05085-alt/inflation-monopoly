@@ -1544,6 +1544,7 @@ async function beginTurn() {
       
       await walk(p, steps);
       await resolveNode(p);
+      if (p.cash < 0) await settleNegative(p);
       
       busy = false;
       setTimeout(endTurn, 1500);
@@ -4607,7 +4608,8 @@ function gameOver() {
   }
   
   const ranking = [...state.players].sort((a, b) => netWorth(b) - netWorth(a));
-  const winner = alivePlayers()[0] || ranking[0];
+  const alive = alivePlayers();
+  const winner = alive.length === 1 ? alive[0] : ranking[0];
   const rows = ranking.map((p, k) => `
     <div class="flex items-center justify-between card p-2 bg-[#1a2233] border border-[#26314a]">
       <div class="flex items-center gap-2">
@@ -5214,7 +5216,10 @@ async function handleOfflineActivePlayer(idx) {
   
   if (!rolledThisTurn && !busy) {
     await doRoll();
+    if (p.cash < 0) await settleNegative(p);
+    setTimeout(endTurn, 1000);
   } else if (rolledThisTurn && !busy) {
+    if (p.cash < 0) await settleNegative(p);
     setTimeout(endTurn, 1000);
   }
 }
