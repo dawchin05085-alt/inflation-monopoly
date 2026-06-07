@@ -325,14 +325,7 @@ function setPlayMode(mode) {
     buildNameInputs();
   }
 }
-window.setPlayMode = setPlayMode;
 
-buildPcount();
-buildNameInputs();
-
-/* =========================================================
-   地圖生成 (大型 55 節點地圖，中央十字橋)
-========================================================= */
 let MAP = { nodes: [], adj: {} };
 
 function ptOnRect(t, r) {
@@ -343,7 +336,6 @@ function ptOnRect(t, r) {
   if (d < r.h) return { x: r.x + r.w, y: r.y + d };
   d -= r.h;
   if (d < r.w) return { x: r.x + r.w - d, y: r.y + r.h };
-  d -= r.w;
   return { x: r.x, y: r.y + r.h - d };
 }
 
@@ -354,8 +346,8 @@ function addEdge(a, b) {
 
 function buildMap() {
   MAP = { nodes: [], adj: {} };
-  // 拉大矩形，讓外環節點不再擠在一起
-  const rect = { x: 460, y: 460, w: 3800, h: 2500 };
+  // 保持寬廣拉伸的矩形空間，使大卡牌之間不重疊
+  const rect = { x: 4000, y: 4000, w: 33600, h: 22000 };
   const R = 38;
   for (let i = 0; i < R; i++) {
     const pt = ptOnRect(i / R, rect);
@@ -364,7 +356,7 @@ function buildMap() {
   for (let i = 0; i < R; i++) addEdge(i, (i + 1) % R);
 
   const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
-  // 中央賭場
+  // 中央賭場 (ID 40)
   MAP.nodes.push({ id: 40, x: cx, y: cy, kind: 'bridge' });
 
   let nid = 41; // 新分支節點起始 id
@@ -408,37 +400,39 @@ function buildMap() {
     return ids;
   }
 
-  // 中央十字長橋（皆經過賭場 40），每段 3 個中繼節點 → 比原本更長
+  // 十字路網（皆經過中央捷徑 40），每個 3 個中繼節點
   const brN = chain(6, 40, 3, 'bridge');
   const brS = chain(40, 25, 3, 'bridge');
   const brW = chain(34, 40, 3, 'bridge');
   const brE = chain(40, 15, 3, 'bridge');
-  // 四條外圍長繞道，沿弧線大幅向外凸出 → 又長又不擠
-  const dNE = chainArc(10, 12, 3, 'detour', 2600);
-  const dSE = chainArc(18, 20, 3, 'detour', 2600);
-  const dSW = chainArc(28, 30, 3, 'detour', 2600);
-  const dNW = chainArc(36, 0, 3, 'detour', 2600);
 
-  // 外環特殊格（皆為 id < 38）
+  // 四角外圍繞道，沿弧線大幅向外凸出，做為轉運角點旁路
+  const dNE = chainArc(10, 12, 3, 'detour', 22800);
+  const dSE = chainArc(18, 20, 3, 'detour', 22800);
+  const dSW = chainArc(28, 30, 3, 'detour', 22800);
+  const dNW = chainArc(36, 0, 1, 'detour', 18000);
+
+  // 外環特殊格
   const spec = {
-    0: 'start', 2: 'fate', 4: 'news', 6: 'plaza', 8: 'shop', 10: 'plaza',
-    11: 'bank', 12: 'plaza', 13: 'jail', 14: 'stock', 15: 'plaza', 17: 'fate',
-    18: 'plaza', 19: 'news', 20: 'plaza', 22: 'shop', 23: 'bank', 25: 'plaza',
-    27: 'stock', 28: 'plaza', 30: 'plaza', 32: 'shop', 34: 'plaza', 36: 'plaza',
-    37: 'stock'
+    0: 'start', 2: 'fate', 4: 'news', 6: 'plaza', 10: 'plaza',
+    11: 'bank', 12: 'plaza', 13: 'jail', 15: 'plaza', 17: 'fate',
+    18: 'plaza', 19: 'news', 20: 'plaza', 25: 'plaza',
+    27: 'stock', 28: 'plaza', 30: 'plaza', 32: 'shop', 34: 'plaza', 36: 'plaza'
   };
   const forks = new Set([6, 10, 15, 18, 25, 28, 34, 36]);
 
-  // 分支（橋／繞道）節點輪流給予事件/商店/股市型別，讓長路線有誘因
-  const branchCycle = ['fate', 'shop', 'news', 'stock'];
+  // 分支（橋／繞道）節點輪流給予事件/商店/股市型別，減少一半功能格，換成一般地產
+  const branchCycle = ['fate', 'property', 'news', 'property', 'fate', 'shop', 'news', 'stock'];
   let bt = 0;
   [...brN, ...brS, ...brW, ...brE, ...dNE, ...dSE, ...dSW, ...dNW].forEach(id => {
     const n = nodeById(id);
     const t = branchCycle[bt % branchCycle.length]; bt++;
-    n.type = t;
-    n.name = { fate: '命運', news: '新聞快報', shop: '道具商店', stock: '證券交易所' }[t];
+    if (t !== 'property') {
+      n.type = t;
+      n.name = { fate: '命運', news: '新聞快報', shop: '道具商店', stock: '證券交易所' }[t];
+    }
   });
-  // 賭場型別
+  // 賭場型別 (中央節點 ID 40)
   const casino = nodeById(40);
   casino.type = 'casino';
   casino.name = '拉斯維加斯賭場';
@@ -454,6 +448,18 @@ function buildMap() {
     { name: '新興開發', color: '#0f766e', size: 3 },
   ];
 
+  const SPECIAL_NAMES = [
+    { name: '特許自貿港區', type: 'cash' },
+    { name: '特許太空商港', type: 'points' },
+    { name: '特許深海油田', type: 'cash' },
+    { name: '特許電競娛樂', type: 'points' },
+    { name: '特許重工廠區', type: 'cash' },
+    { name: '特許星鏈衛星', type: 'points' },
+    { name: '特許高鐵軌道', type: 'cash' },
+    { name: '特許元宇宙中心', type: 'points' }
+  ];
+  let specIdx = 0;
+
   let pIdx = 0, grpIdx = 0, grpLeft = GROUPS[0].size;
   MAP.nodes.forEach(n => {
     if (n.type) return; // 分支/賭場已設定型別 → 跳過
@@ -461,7 +467,7 @@ function buildMap() {
       n.type = spec[n.id];
       n.name = {
         start: '起點', fate: '命運', news: '新聞快報', shop: '道具商店',
-        stock: '證券交易所', bank: '中央銀行', jail: '監獄/休息'
+        stock: '證券交易所', bank: '中央銀行', jail: '監獄/休息', plaza: '轉運廣場'
       }[spec[n.id]];
       if (forks.has(n.id)) n.name = '轉運廣場';
       return;
@@ -473,6 +479,16 @@ function buildMap() {
     n.owner = null;
     n.level = 0;
     n.lastActionRound = 0;
+
+    if (n.kind === 'detour' || n.kind === 'bridge') {
+      n.isSpecial = true;
+      const sProp = SPECIAL_NAMES[specIdx % SPECIAL_NAMES.length];
+      n.name = sProp.name;
+      n.specialType = sProp.type;
+      n.basePrice = 1200 + specIdx * 200;
+      n.baseRent = Math.round(n.basePrice * 0.12);
+      specIdx++;
+    }
 
     if (grpLeft <= 0) {
       grpIdx = (grpIdx + 1) % GROUPS.length;
@@ -817,22 +833,34 @@ function buildMapDOM() {
       if (seen.has(key)) return;
       seen.add(key);
       const na = nodeById(+a), nb = nodeById(+b);
+      
+      // 繪製地圖底線
       const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       ln.setAttribute('x1', na.x);
       ln.setAttribute('y1', na.y);
       ln.setAttribute('x2', nb.x);
       ln.setAttribute('y2', nb.y);
-      ln.setAttribute('stroke', '#2b3a59');
-      ln.setAttribute('stroke-width', '10');
+      ln.setAttribute('stroke', '#1e293b');
+      ln.setAttribute('stroke-width', '32');
       ln.setAttribute('stroke-linecap', 'round');
       svg.appendChild(ln);
+
+      // 繪製光流特效線
+      const fln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      fln.setAttribute('x1', na.x);
+      fln.setAttribute('y1', na.y);
+      fln.setAttribute('x2', nb.x);
+      fln.setAttribute('y2', nb.y);
+      fln.setAttribute('class', 'flow-line');
+      fln.setAttribute('stroke-linecap', 'round');
+      svg.appendChild(fln);
     });
   });
   
-  svg.setAttribute('width', bbox.maxX + 250);
-  svg.setAttribute('height', bbox.maxY + 250);
-  world.style.width = (bbox.maxX + 250) + 'px';
-  world.style.height = (bbox.maxY + 250) + 'px';
+  svg.setAttribute('width', bbox.maxX + 6000);
+  svg.setAttribute('height', bbox.maxY + 6000);
+  world.style.width = (bbox.maxX + 6000) + 'px';
+  world.style.height = (bbox.maxY + 6000) + 'px';
   
   MAP.nodes.forEach(n => {
     const isFork = (MAP.adj[n.id] || []).length > 2;
@@ -859,18 +887,37 @@ function updateMap() {
     if (!el) return;
     
     const bar = $('bar' + n.id);
-    if (bar) bar.style.background = tileColor(n);
+    const col = tileColor(n);
+    if (bar) {
+      bar.style.background = col;
+      bar.style.color = col; // 用於 CSS currentColor 陰影
+    }
     
-    // 明確標示土地所有權與邊框顏色
+    // 依所有權設定卡片邊框與自訂動態霓虹光暈 (Glow)
+    let glow = null;
     if (n.type === 'property') {
       if (n.owner !== null) {
         const owner = state.players[n.owner];
-        el.style.borderWidth = '3px';
+        el.style.borderWidth = '16px';
         el.style.borderColor = owner.color;
+        glow = owner.color;
       } else {
-        el.style.borderWidth = '2px';
-        el.style.borderColor = 'var(--line)';
+        el.style.borderWidth = '16px';
+        el.style.borderColor = '#1e293b';
       }
+    } else {
+      glow = col;
+    }
+    
+    const playersOnNode = state.players.filter(pl => pl.alive && pl.node === n.id);
+    const hasCurPlayer = playersOnNode.some(pl => pl.id === curPlayer().id);
+    const hasOtherPlayers = playersOnNode.some(pl => pl.id !== curPlayer().id);
+    
+    // 若該卡片目前無玩家站在上面，顯示精緻的周邊霓虹光暈，避免被高亮覆蓋
+    if (glow && !hasCurPlayer && !hasOtherPlayers) {
+      el.style.boxShadow = `0 8px 32px rgba(0, 0, 0, 0.5), 0 0 16px ${glow}25`;
+    } else if (!hasCurPlayer && !hasOtherPlayers) {
+      el.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.5)';
     }
     
     const meta = $('meta' + n.id);
@@ -880,8 +927,14 @@ function updateMap() {
         if (n.owner !== null) {
           const owner = state.players[n.owner];
           t = `【${owner.name.substring(0, 4)}】${HOUSE_LABEL[n.level]}`;
+          if (n.isSpecial) {
+            const bonusDesc = n.specialType === 'cash'
+              ? `$${fmt(Math.round(500 * (1 + n.level * 0.6) * state.inflationMult))}`
+              : `${15 + n.level * 8}點`;
+            t += ` | 🚩+${bonusDesc}`;
+          }
         } else {
-          t = `無主 · $${fmt(inf(n.basePrice))}`;
+          t = `${n.isSpecial ? '特許事業' : '無主'} · $${fmt(inf(n.basePrice))}`;
         }
       }
       
@@ -903,7 +956,9 @@ function updateMap() {
     if (grp) {
       if (n.type === 'property') {
         const mono = isMonopoly(n);
-        grp.innerHTML = `<span style="color: ${n.groupColor}">▰ ${n.groupName}</span>${mono ? ' <span style="color:' + n.groupColor + '; font-weight:900;">👑壟斷</span>' : ''}`;
+        let prefix = n.isSpecial ? '🏢 ' : '▰ ';
+        let gName = n.isSpecial ? `特許 · ${n.groupName}` : n.groupName;
+        grp.innerHTML = `<span style="color: ${n.groupColor}">${prefix}${gName}</span>${mono ? ' <span style="color:' + n.groupColor + '; font-weight:900;">👑壟斷</span>' : ''}`;
       } else {
         grp.innerHTML = '';
       }
@@ -917,17 +972,31 @@ function updateMap() {
         const wrap = document.createElement('div');
         wrap.className = 'pawn-tag' + (isCur ? ' pawn-tag-cur' : '');
         wrap.style.setProperty('--pcolor', p.color);
-        wrap.innerHTML = `<span class="pawn pawn-marker${isCur ? ' pawn-pulse' : ''}" style="border-color:${p.color}; box-shadow:0 0 0 3px ${p.color}, 0 2px 6px rgba(0,0,0,.55);">${p.icon}</span>` +
-          `<span class="pawn-name" style="background:${p.color};">${p.name}</span>`;
+        wrap.innerHTML = `<span class="pawn-marker${isCur ? ' pawn-pulse' : ''}" style="border-color:${p.color};">${p.icon}</span>` +
+          `<span class="pawn-name" style="background:${p.color}; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,0.8);">${p.name}</span>`;
         box.appendChild(wrap);
       });
     }
-    const playersOnNode = state.players.filter(pl => pl.alive && pl.node === n.id);
-    const hasCurPlayer = playersOnNode.some(pl => pl.id === curPlayer().id);
-    const hasOtherPlayers = playersOnNode.some(pl => pl.id !== curPlayer().id);
     
     el.classList.toggle('hl', hasCurPlayer);
     el.classList.toggle('has-others', hasOtherPlayers && !hasCurPlayer);
+
+    // 渲染 SimCity 風格地圖卡牌上方的角色浮動氣泡
+    let bubbleEl = el.querySelector('.node-floating-bubble');
+    if (playersOnNode.length > 0) {
+      if (!bubbleEl) {
+        bubbleEl = document.createElement('div');
+        bubbleEl.className = 'node-floating-bubble';
+        el.appendChild(bubbleEl);
+      }
+      const curPl = playersOnNode.find(pl => pl.id === curPlayer().id) || playersOnNode[0];
+      bubbleEl.style.setProperty('--pcolor', curPl.color);
+      bubbleEl.innerHTML = playersOnNode.map(p => `
+        <span class="bubble-pawn">${p.icon}</span>
+      `).join('');
+    } else {
+      if (bubbleEl) bubbleEl.remove();
+    }
   });
 }
 
@@ -960,7 +1029,8 @@ function recenter(initial) {
   const n = nodeById(curPlayer().node);
   if (initial) {
     const cx = (bbox.minX + bbox.maxX) / 2, cy = (bbox.minY + bbox.maxY) / 2;
-    view.zoom = Math.min(w / (bbox.maxX - bbox.minX + 360), h / (bbox.maxY - bbox.minY + 360), 0.85);
+    // 使用 12000px 的邊界補償以完美容納超大卡片邊緣
+    view.zoom = Math.min(w / (bbox.maxX - bbox.minX + 12000), h / (bbox.maxY - bbox.minY + 12000), 0.15);
     view.x = w / 2 - cx * view.zoom;
     view.y = h / 2 - cy * view.zoom;
   } else {
@@ -971,7 +1041,7 @@ function recenter(initial) {
 }
 
 function zoomBy(f) {
-  view.zoom = Math.max(0.2, Math.min(2.0, view.zoom * f));
+  view.zoom = Math.max(0.01, Math.min(3.0, view.zoom * f));
   applyView();
 }
 window.zoomBy = zoomBy;
@@ -983,7 +1053,7 @@ function centerOnNode(nodeId, zoom) {
   const n = nodeById(nodeId);
   if (!n) return;
   if (typeof zoom === 'number') {
-    view.zoom = Math.max(0.2, Math.min(2.0, zoom));
+    view.zoom = Math.max(0.01, Math.min(3.0, zoom));
   }
   view.x = w / 2 - n.x * view.zoom;
   view.y = h / 2 - n.y * view.zoom;
@@ -992,7 +1062,7 @@ function centerOnNode(nodeId, zoom) {
 
 /* 放大並聚焦到「目前行動玩家」的位置 */
 function zoomToCurrentPlayer() {
-  const target = Math.min(2.0, view.zoom * 1.3 < 0.9 ? 0.9 : view.zoom * 1.3);
+  const target = Math.min(0.35, view.zoom * 1.3 < 0.15 ? 0.15 : view.zoom * 1.3);
   centerOnNode(curPlayer().node, target);
   flashFocusNode(curPlayer().node);
 }
@@ -1003,7 +1073,7 @@ function focusPlayer(pid) {
   if (!state) return;
   const p = state.players.find(x => x.id === pid);
   if (!p) return;
-  const target = Math.max(view.zoom, 0.85);
+  const target = Math.max(view.zoom, 0.15);
   centerOnNode(p.node, target);
   flashFocusNode(p.node);
 }
@@ -1254,7 +1324,24 @@ const PIP_MAP = {
 };
 
 function showDie(v) {
-  $('die').querySelectorAll('.pip').forEach((p, i) => {
+  const die = $('die');
+  // 多骰子（機車/汽車卡）總和可能 >6，PIP_MAP 只有 1~6，故 >6 時改以數字顯示，避免崩潰
+  if (!PIP_MAP[v]) {
+    die.querySelectorAll('.pip').forEach(p => { p.style.visibility = 'hidden'; });
+    let num = die.querySelector('.die-number');
+    if (!num) {
+      num = document.createElement('div');
+      num.className = 'die-number';
+      num.style.cssText = 'grid-column:1/4;grid-row:1/4;display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:900;color:#111;font-family:"JetBrains Mono",monospace;';
+      die.appendChild(num);
+    }
+    num.textContent = v;
+    num.style.display = 'flex';
+    return;
+  }
+  const num = die.querySelector('.die-number');
+  if (num) num.style.display = 'none';
+  die.querySelectorAll('.pip').forEach((p, i) => {
     p.style.visibility = PIP_MAP[v].includes(i) ? 'visible' : 'hidden';
   });
 }
@@ -1405,7 +1492,9 @@ async function beginTurn() {
     
     setTimeout(async () => {
       rolledThisTurn = true;
-      let steps = rnd(1, 6);
+      const dc = p.diceCount || 1;
+      let steps = 0;
+      for (let d = 0; d < dc; d++) steps += rnd(1, 6);
       if (hasDeity(p, 'bad') && !p.deity.big && Math.random() < 0.5) steps = 1;
       else if (hasDeity(p, 'bad') && p.deity.big) steps = 1;
       
@@ -1599,6 +1688,25 @@ async function walk(p, steps) {
       p.cash += pay;
       p.points += pts;
       log("🚩 " + `<b>${p.name}</b> 經過起點，領取薪資 $${fmt(pay)} 並獲得 ${pts} 點。`, '#34d399');
+
+      // 特許事業額外分紅
+      let bonusMsg = [];
+      MAP.nodes.forEach(nNode => {
+        if (nNode.isSpecial && nNode.owner === p.id) {
+          if (nNode.specialType === 'cash') {
+            const reward = Math.round(500 * (1 + nNode.level * 0.6) * state.inflationMult);
+            p.cash += reward;
+            bonusMsg.push(`💵 ${nNode.name}（分紅：$${fmt(reward)}，含通膨）`);
+          } else if (nNode.specialType === 'points') {
+            const reward = 15 + nNode.level * 8;
+            p.points += reward;
+            bonusMsg.push(`🔵 ${nNode.name}（分紅：${reward} 點數）`);
+          }
+        }
+      });
+      if (bonusMsg.length > 0) {
+        log("🏢 " + `<b>${p.name}</b> 的特許事業在此發放分紅：<br>` + bonusMsg.join('<br>'), '#e879f9');
+      }
     }
     
     if (state.barricades[nextId]) {
@@ -1746,6 +1854,118 @@ function amICasinoActor() {
 function casinoAct(v) { if (casinoResolver) { const r = casinoResolver; casinoResolver = null; r(v); } }
 window.casinoAct = casinoAct;
 
+window.casinoQuickBet = function(val) {
+  const input = document.getElementById('casinoBet');
+  const currency = document.getElementById('casinoCurrency').value;
+  if (!input) return;
+  const p = state.players[state.casinoLive.pid];
+  const bal = currency === 'cash' ? p.cash : p.points;
+  if (val === 'all') {
+    input.value = bal;
+  } else {
+    let currentVal = parseInt(input.value) || 0;
+    input.value = Math.min(bal, Math.max(1, currentVal + val));
+  }
+};
+
+function openPropertyStatus() {
+  renderPropertyStatus();
+  $('propertyStatusPanel').style.display = 'flex';
+}
+window.openPropertyStatus = openPropertyStatus;
+
+function closePropertyStatus() {
+  $('propertyStatusPanel').style.display = 'none';
+}
+window.closePropertyStatus = closePropertyStatus;
+
+function renderPropertyStatus() {
+  const container = $('propertyStatusContent');
+  if (!container) return;
+  if (!state) {
+    container.innerHTML = '<div class="text-center text-[#8a98b3] py-8">遊戲尚未開始</div>';
+    return;
+  }
+  const properties = MAP.nodes.filter(n => n.type === 'property');
+  const GROUPS = [
+    { name: '老城商圈', color: '#a16207' },
+    { name: '濱海特區', color: '#0e7490' },
+    { name: '科技走廊', color: '#1d4ed8' },
+    { name: '金融大道', color: '#b45309' },
+    { name: '工業重鎮', color: '#4d7c0f' },
+    { name: '觀光勝地', color: '#be185d' },
+    { name: '頂級地段', color: '#7c3aed' },
+    { name: '新興開發', color: '#0f766e' },
+  ];
+  let html = '';
+  GROUPS.forEach((g, gIdx) => {
+    const groupNodes = properties.filter(n => n.group === gIdx);
+    if (groupNodes.length === 0) return;
+    let monopolyOwner = null;
+    const firstOwner = groupNodes[0].owner;
+    if (firstOwner !== null && groupNodes.every(n => n.owner === firstOwner)) {
+      monopolyOwner = firstOwner;
+    }
+    let statusBadge = '';
+    if (monopolyOwner !== null) {
+      const owner = state.players[monopolyOwner];
+      statusBadge = `<span class="px-2.5 py-1 text-xs rounded-full font-bold border border-[#f5c451] text-[#f5c451] bg-[#f5c451]/10">👑 ${owner.name} 壟斷中</span>`;
+    } else {
+      statusBadge = `<span class="px-2.5 py-1 text-xs rounded-full font-bold border border-dashed border-[#8a98b3] text-[#8a98b3]">🔓 未壟斷</span>`;
+    }
+    html += `
+      <div class="border border-[#26314a] rounded-lg p-3 bg-[#121826]/60">
+        <div class="flex items-center justify-between border-b border-[#26314a]/60 pb-2 mb-2.5">
+          <div class="flex items-center gap-2">
+            <span style="display:inline-block; width: 14px; height: 14px; background: ${g.color}; border-radius: 4px;"></span>
+            <span class="font-bold text-sm" style="color: ${g.color};">${g.name}</span>
+            <span class="text-xs text-[#8a98b3]">（共 ${groupNodes.length} 塊地）</span>
+          </div>
+          ${statusBadge}
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+      `;
+    groupNodes.forEach(n => {
+      let ownerText = '<span class="text-[#8a98b3]">⚪ 無主地</span>';
+      if (n.owner !== null) {
+        const owner = state.players[n.owner];
+        ownerText = `<span class="px-2 py-0.5 rounded text-xs font-bold" style="background: ${owner.color}; color: #fff;">👤 ${owner.name}</span>`;
+      }
+      const levelText = n.level > 0 ? `<span class="text-[#f5c451] text-xs font-bold">${HOUSE_LABEL[n.level]}</span>` : '<span class="text-[#8a98b3] text-[11px]">空地</span>';
+      let rentVal = inf(n.baseRent) * HOUSE_MULT[n.level];
+      if (monopolyOwner !== null) rentVal *= 2;
+      let specialDesc = '';
+      if (n.isSpecial) {
+        const bonusDesc = n.specialType === 'cash'
+          ? `$${fmt(Math.round(500 * (1 + n.level * 0.6) * state.inflationMult))}`
+          : `${15 + n.level * 8}點`;
+        specialDesc = ` | 🎁 起點分紅: ${bonusDesc}`;
+      }
+      html += `
+        <div class="flex items-center justify-between p-2 rounded bg-[#1a2233] border border-[#26314a]/40 text-xs">
+          <div class="flex flex-col gap-0.5">
+            <span class="font-bold text-white">${n.name} <span class="text-[#8a98b3] font-normal text-[10px] mono">#${n.id}</span></span>
+            <span class="text-[#8a98b3] text-[10px] flex items-center gap-1.5">
+              <span>過路費: $${fmt(rentVal)}${specialDesc}</span>
+              <span>•</span>
+              ${levelText}
+            </span>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            ${ownerText}
+          </div>
+        </div>
+      `;
+    });
+    html += `
+        </div>
+      </div>
+    `;
+  });
+  container.innerHTML = html;
+}
+window.renderPropertyStatus = renderPropertyStatus;
+
 /* 行動者可操作的賭場面板 */
 function renderCasinoActing() {
   const cl = state.casinoLive; if (!cl) return;
@@ -1760,24 +1980,45 @@ function renderCasinoActing() {
   const cardsBlock = `<div class="flex justify-center gap-4 my-4">${cardHTML(cl.first, cl.phase === 'reveal')}${cl.phase === 'reveal' ? cardHTML(cl.second) : ''}</div>`;
   let controls;
   if (cl.phase === 'bet') {
+    const defaultBetVal = Math.min(1000, Math.max(1, p.cash));
     controls = `
-      <div class="flex gap-2 mb-3">
-        <select id="casinoCurrency" class="seg text-sm" style="flex:1" onchange="(function(){var b=document.getElementById('casinoBet'); if(b) b.value=this.value==='cash'? Math.min(50, Math.max(0, ${p.cash})) : Math.min(50, ${p.points});}).call(this)">
-          <option value="cash">💵 現金（$${fmt(p.cash)}）</option>
-          <option value="points">🔵 點數（${p.points} PP）</option>
-        </select>
-        <input id="casinoBet" type="number" min="1" value="${Math.min(50, Math.max(1, p.cash))}" class="seg text-sm font-bold mono" style="flex:1" placeholder="下注金額">
+      <div class="mb-4">
+        <div class="text-[#8a98b3] text-xs font-bold mb-1.5 flex justify-between">
+          <span>💰 下注種類與金額：</span>
+          <span id="maxBetInfo" class="text-[#f5c451]">已下注 ${cl.rounds} / 10 次（最多 10 次）</span>
+        </div>
+        <div class="flex gap-2">
+          <select id="casinoCurrency" class="seg text-sm font-bold" style="width: 120px;" onchange="(function(){
+            var b=document.getElementById('casinoBet'); 
+            if(b) b.value = this.value==='cash'? Math.min(1000, ${p.cash}) : Math.min(10, ${p.points});
+          }).call(this)">
+            <option value="cash">💵 現金</option>
+            <option value="points">🔵 點數</option>
+          </select>
+          <input id="casinoBet" type="number" min="1" value="${defaultBetVal}" class="seg text-sm font-bold mono" style="flex:1" placeholder="請輸入金額">
+          <button class="btn btn-red px-4 text-xs font-bold" onclick="casinoQuickBet('all')">ALL IN</button>
+        </div>
+        <div class="flex gap-2 mt-2">
+          <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(100)">+100</button>
+          <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(1000)">+1,000</button>
+          <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(10000)">+10,000</button>
+          <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(10)">+10 PP</button>
+          <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(50)">+50 PP</button>
+        </div>
       </div>
       <div class="flex gap-2">
-        <button class="btn btn-gold py-2 text-sm" style="flex:1" onclick="casinoAct('high')">🔼 更大</button>
-        <button class="btn btn-gold py-2 text-sm" style="flex:1" onclick="casinoAct('low')">🔽 更小</button>
-        <button class="btn btn-ghost py-2 px-3 text-sm" onclick="casinoAct('end')">🚪 結束賭局</button>
+        <button class="btn btn-gold py-2.5 text-sm" style="flex:1" onclick="casinoAct('high')">🔼 更大</button>
+        <button class="btn btn-gold py-2.5 text-sm" style="flex:1" onclick="casinoAct('low')">🔽 更小</button>
+        <button class="btn btn-ghost py-2.5 px-4 text-sm" onclick="casinoAct('end')">🚪 結束賭局</button>
       </div>`;
   } else {
+    const limitReached = cl.rounds >= 10;
     controls = `
       <div class="flex gap-2">
-        <button class="btn btn-gold py-2 text-sm" style="flex:1" onclick="casinoAct('again')">🔁 再賭一局</button>
-        <button class="btn btn-ghost py-2 text-sm" style="flex:1" onclick="casinoAct('end')">🚪 結束賭局</button>
+        <button class="btn btn-gold py-2.5 text-sm" style="flex:1" ${limitReached ? 'disabled' : ''} onclick="casinoAct('again')">
+          ${limitReached ? '🚫 已達 10 局上限' : '🔁 再賭一局'}
+        </button>
+        <button class="btn btn-ghost py-2.5 text-sm" style="flex:1" onclick="casinoAct('end')">🚪 結束賭局</button>
       </div>`;
   }
   $('casinoBody').innerHTML = `
@@ -1785,10 +2026,10 @@ function renderCasinoActing() {
       <div class="display text-xl font-bold text-[#d97706]">🎰 拉斯維加斯賭場</div>
       <div class="text-[11px] text-[#8a98b3] mt-0.5">撲克牌比大小：猜中下一張更大／更小，可贏得雙倍下注</div>
     </div>
-    <div class="flex justify-center gap-4 text-xs mb-1">
+    <div class="flex justify-center gap-4 text-xs mb-3">
       <span class="text-[#8a98b3]">💵 現金：<b class="text-[#f5c451] mono">$${fmt(p.cash)}</b></span>
       <span class="text-[#8a98b3]">🔵 點數：<b class="text-[#60a5fa] mono">${p.points} PP</b></span>
-      <span class="text-[#8a98b3]">已玩 <b class="text-white">${cl.rounds}</b> 局</span>
+      <span class="text-[#8a98b3]">已玩 <b class="text-white">${cl.rounds} / 10</b> 局</span>
     </div>
     ${cardsBlock}
     ${resultBlock}
@@ -1844,6 +2085,9 @@ async function runCasino(p) {
   state.casinoLive = { pid: p.id, name: p.name, color: p.color, cash: p.cash, points: p.points, first: null, second: null, phase: 'bet', lastResult: null, rounds: 0 };
 
   while (true) {
+    if (state.casinoLive.rounds >= 10) {
+      break;
+    }
     const first = dealCard();
     state.casinoLive.first = first;
     state.casinoLive.second = null;
@@ -2339,8 +2583,6 @@ function fluctuateStocks() {
     
     s.hist.push(s.price);
     if (s.hist.length > 30) s.hist.shift();
-    
-    s.limit = 0;
   });
   
   // 結算紅卡/黑卡效果
@@ -2746,7 +2988,7 @@ async function checkMarginCall(p) {
 async function settleNegative(p) {
   while (p.cash < 0 && p.alive) {
     const hasSavings = p.savings > 0;
-    const hasStocks = Object.keys(p.stocks).some(tk => p.stocks[tk] > 0);
+    const hasStocks = Object.keys(p.stocks).some(tk => getStockQty(p, tk) > 0);
     const hasPledges = Object.keys(p.pledged).length > 0;
     const hasProperties = MAP.nodes.some(n => n.type === 'property' && n.owner === p.id);
     
@@ -2786,10 +3028,10 @@ async function settleNegative(p) {
       state.turnActions.push(`🏦 提領定存還債：$${fmt(amt)}`);
     }
     else if (choice === 'sell_stock') {
-      const tick = Object.keys(p.stocks).find(tk => p.stocks[tk] > 0);
+      const tick = Object.keys(p.stocks).find(tk => getStockQty(p, tk) > 0);
       const s = state.stocks.find(x => x.ticker === tick);
       if (s) {
-        const qty = p.stocks[tick];
+        const qty = getStockQty(p, tick);
         const earn = qty * s.price;
         p.cash += earn;
         delete p.stocks[tick];
@@ -3112,11 +3354,11 @@ async function useItem(itemKey, index) {
       const ownerName = state.players[n.owner].name;
       if (n.level > 0) {
         n.level--;
-        log(`🏚️ <b>${p.name}</b> 拆 sublevel 了 ${ownerName} 的「${n.name}」，降為${HOUSE_LABEL[n.level]}。`, '#f87171');
+        log(`🏚️ <b>${p.name}</b> 拆除了 ${ownerName} 的「${n.name}」，降為${HOUSE_LABEL[n.level]}。`, '#f87171');
         await alertModal('🏚️ 拆除完成', `「${n.name}」已被降級為 <b>${HOUSE_LABEL[n.level]}</b>。`);
       } else {
         n.owner = null;
-        log(`🏚️ <b>${p.name}</b> 拆 sublevel 了 ${ownerName} 的「${n.name}」，該地已收回為無主地！`, '#f87171');
+        log(`🏚️ <b>${p.name}</b> 拆除了 ${ownerName} 的「${n.name}」，該地已收回為無主地！`, '#f87171');
         await alertModal('🏚️ 土地收回', `「${n.name}」已被拆除並收回為<b>無主地</b>！`);
       }
     }
@@ -4801,6 +5043,10 @@ function clearActiveSession() {
 
 // 初始化加載
 updateSaveSlotsUI();
+
+// 初始渲染設定畫面的玩家人數列與名稱欄位（預設單機模式），避免首次載入時為空白
+buildPcount();
+buildNameInputs();
 
 // 檢查是否具有未結束的線上戰局
 (function() {

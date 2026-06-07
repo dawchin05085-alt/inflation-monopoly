@@ -319,6 +319,7 @@
         <button id="btnItems" class="btn btn-ghost px-3.5 py-2 text-sm" onclick="openItems()">🎴 道具卡片</button>
         <button id="btnBuild" class="btn btn-ghost px-3.5 py-2 text-sm" onclick="openBuild()">🏠 蓋房升級</button>
         <button id="btnPlayers" class="btn btn-ghost px-3.5 py-2 text-sm" onclick="openPlayers()">👥 玩家狀態</button>
+        <button id="btnPropertyStatus" class="btn btn-ghost px-3.5 py-2 text-sm" onclick="openPropertyStatus()">🏠 土地狀況</button>
         <button id="btnLog" class="btn btn-ghost px-3.5 py-2 text-sm" onclick="openLog()">📜 事件紀錄</button>
         <button id="btnSave" class="btn btn-ghost px-3.5 py-2 text-sm text-[#f5c451] border-[#f5c451]/30 hover:border-[#f5c451]" onclick="openSaveGameModal()">⚙️ 系統 / 存檔</button>
         <button id="btnEnd" class="btn btn-ghost px-4 py-2 text-sm" onclick="manualEnd()" disabled style="opacity: 0.4;">⏭ 結束回合</button>
@@ -382,6 +383,19 @@
     <div class="card pop" style="max-width: 560px; width: 100%; padding: 22px;">
       <div id="casinoBody">
         <!-- 動態渲染賭場 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 土地狀況面板 -->
+  <div id="propertyStatusPanel" class="overlay" style="display: none; z-index: 90;">
+    <div class="card pop" style="max-width: 700px; width: 100%; padding: 22px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="flex items-center justify-between mb-3 border-b border-[#26314a] pb-2">
+        <div class="display text-xl font-bold text-[#f5c451]">🏠 土地資產狀況</div>
+        <button class="btn btn-ghost px-3 py-1 text-xs" onclick="closePropertyStatus()">關閉 ✕</button>
+      </div>
+      <div id="propertyStatusContent" class="scroll pr-1 flex-1 overflow-y-auto flex flex-col gap-4">
+        <!-- 動態渲染土地狀況 -->
       </div>
     </div>
   </div>

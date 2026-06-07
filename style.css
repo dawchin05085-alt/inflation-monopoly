@@ -257,15 +257,14 @@ input[type=number], input[type=text] {
   border-radius: 0 6px 6px 0;
 }
 
-/* 地圖樣式 */
+/* 地圖樣式 (黑底高對比設計) */
 #mapViewport {
   position: absolute;
   inset: 0;
   overflow: hidden;
   cursor: grab;
-  background:
-    radial-gradient(1200px 800px at 30% 20%, rgba(96, 165, 250, 0.07), transparent 60%),
-    radial-gradient(1000px 700px at 80% 80%, rgba(245, 196, 81, 0.06), transparent 60%);
+  background: #000000; /* 全黑底色 */
+  box-shadow: inset 0 0 80px rgba(255, 255, 255, 0.05);
 }
 
 #mapViewport.dragging {
@@ -279,99 +278,154 @@ input[type=number], input[type=text] {
   transform-origin: 0 0;
 }
 
+/* 地圖卡牌節點 (放大 2 倍字體與對應容器尺寸) */
 .mnode {
   position: absolute;
   transform: translate(-50%, -50%);
-  width: 270px;
-  min-height: 130px;
-  border: 2px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel2);
-  padding: 10px 14px 14px;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+  width: 1760px;      /* 寬度再加倍 */
+  min-height: 800px; /* 高度再加倍 */
+  border: 16px solid #1e293b; /* 邊框加厚 */
+  border-radius: 32px; /* 圓角放大 */
+  background: #ffffff; /* 卡牌純白質感 */
+  padding: 0 0 80px 0; /* 內邊距放大 */
+  box-shadow: 0 32px 96px rgba(0, 0, 0, 0.6);
   user-select: none;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
+.mnode:hover {
+  transform: translate(-50%, -51%) scale(1.02);
+  box-shadow: 0 64px 144px rgba(0, 0, 0, 0.8);
+  z-index: 5;
+}
+
+/* 頂部色帶 (按比例加厚) */
 .mnode .bar {
-  height: 10px;
-  border-radius: 5px;
-  margin-bottom: 8px;
+  height: 176px; /* 色條再加厚 */
+  border-bottom: 16px solid #1e293b;
+  margin-bottom: 64px;
+  border-radius: 0;
+  box-shadow: none;
 }
-
+/* 標題 (字體放大至 300px) */
 .mnode .nname {
-  font-size: 28px;
-  font-weight: 800;
+  font-size: 300px;
+  font-weight: 950;
   line-height: 1.2;
+  color: #1e293b;
+  padding: 0 80px;
+  text-shadow: none;
 }
 
+/* 數值 (字體再變大 2 倍 * 1.5 = 3 倍大) */
 .mnode .nmeta {
-  font-size: 20px;
-  color: var(--muted);
-  margin-top: 5px;
-}
-
-.mnode .ngrp {
-  font-size: 18px;
+  font-size: 150px;
+  color: #475569;
+  margin-top: 40px;
   font-weight: 700;
-  margin-top: 5px;
+  padding: 0 80px;
 }
 
+/* 路段名稱 (字體再變大 2 倍 * 1.5 = 3 倍大) */
+.mnode .ngrp {
+  font-size: 138px;
+  font-weight: 800;
+  margin-top: 32px;
+  padding: 0 80px;
+}
+
+/* 當前玩家踩到的高亮卡牌 */
 .mnode.hl {
-  outline: 3px solid var(--gold);
-  box-shadow: 0 0 25px rgba(245, 196, 81, 0.85);
-  transform: translate(-50%, -50%) scale(1.08);
+  border-color: #ef4444 !important; /* 紅色高亮外框 */
+  box-shadow: 0 0 0 32px #ef4444, 0 64px 144px rgba(0, 0, 0, 0.7) !important;
+  transform: translate(-50%, -50%) scale(1.05) !important;
   z-index: 10;
+  animation: none;
 }
 
+/* 其他玩家踩到的卡牌 */
 .mnode.has-others {
-  outline: 3px dashed #60a5fa;
-  box-shadow: 0 0 20px rgba(96, 165, 250, 0.7);
-  transform: translate(-50%, -50%) scale(1.05);
+  border-color: #3b82f6 !important; /* 藍色高亮外框 */
+  box-shadow: 0 0 0 24px #3b82f6, 0 48px 112px rgba(0, 0, 0, 0.6) !important;
+  transform: translate(-50%, -50%) scale(1.03) !important;
   z-index: 8;
 }
 
 /* 對焦聚光時短暫高亮的節點 */
 .mnode.focus-flash {
-  outline: 4px solid #34d399 !important;
-  box-shadow: 0 0 35px rgba(52, 211, 153, 0.95) !important;
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 32px #10b981, 0 64px 160px rgba(0, 0, 0, 0.7) !important;
   z-index: 12;
   animation: focusFlash 0.8s ease-in-out 2;
 }
 @keyframes focusFlash {
-  0%, 100% { outline-color: #34d399; }
-  50% { outline-color: #f5c451; }
+  0%, 100% { border-color: #10b981; }
+  50% { border-color: #f5c451; }
 }
 
-/* 地圖玩家標記：頭像 + 彩色名牌 */
+/* 地圖連線 */
+.flow-line {
+  display: none !important;
+}
+
+/* 地圖路徑線 (黑底高對比，加粗線條) */
+#mapEdges line {
+  stroke: #26314a; /* 與主背景呼應的深鋼灰色線段 */
+  stroke-width: 40px; /* 線段粗度再加倍 */
+  stroke-linecap: round;
+  transition: all 0.3s ease;
+}
+
+/* 地圖玩家標記：實體卡牌棋子與名牌 (按比例放大 2 倍) */
 .pawn-tag {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 24px;
+  padding: 0 80px;
+  margin-top: 48px;
+}
+.pawn-marker {
+  width: 224px;
+  height: 224px;
+  border-radius: 50%;
+  border: 12px solid #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 128px;
+  background: #ffffff;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+  transition: all 0.2s ease;
+  z-index: 2;
 }
 .pawn-name {
-  font-size: 12px;
+  font-size: 80px;   /* 字體再變大 2 倍 */
   font-weight: 800;
-  color: #0b0f17;
-  padding: 1px 6px;
-  border-radius: 8px;
-  line-height: 1.3;
-  max-width: 90px;
+  color: #1e293b;
+  background: #ffffff !important; /* 實體棋子白色立牌 */
+  border: 8px solid #1e293b;
+  padding: 8px 48px;
+  border-radius: 32px;
+  line-height: 1.2;
+  max-width: 640px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+  text-shadow: none;
 }
-.pawn-tag-cur .pawn-name {
-  outline: 2px solid #fff;
+.pawn-tag-cur .pawn-marker {
+  transform: scale(1.2) translateY(-16px); /* 浮起效果 */
+  box-shadow: 0 40px 80px rgba(0, 0, 0, 0.5);
 }
 .pawn-pulse {
-  animation: pawnPulse 1.1s ease-in-out infinite;
+  animation: pawnPulse 1.2s ease-in-out infinite alternate;
 }
 @keyframes pawnPulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.22); }
+  from { transform: scale(1.1) translateY(-16px); }
+  to { transform: scale(1.25) translateY(-32px); }
 }
 
 /* 撲克牌（賭場用） */
@@ -531,6 +585,56 @@ input[type=number], input[type=text] {
   opacity: 0.75;
   border-style: dashed !important;
   border-color: #f87171 !important;
+}
+
+/* SimCity 樣式角色頭上浮動氣泡 */
+.node-floating-bubble {
+  position: absolute;
+  bottom: 108%; /* 浮在地圖卡牌上方 */
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(11, 15, 23, 0.95);
+  backdrop-filter: blur(8px);
+  border: 8px solid var(--pcolor, #f5c451); /* 對應玩家顏色的邊框 */
+  border-radius: 999px;
+  padding: 16px 36px;
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.8), 0 0 40px var(--pcolor, #f5c451);
+  z-index: 50;
+  pointer-events: none;
+  animation: simCityFloat 1.8s infinite alternate ease-in-out;
+}
+
+/* 氣泡下方指向箭頭 */
+.node-floating-bubble::after {
+  content: '';
+  position: absolute;
+  top: 99%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 32px 24px 0;
+  border-style: solid;
+  border-color: var(--pcolor, #f5c451) transparent;
+  display: block;
+  width: 0;
+}
+
+.bubble-pawn {
+  font-size: 110px; /* 大圖標 */
+  text-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+  animation: pawnPulse 1.2s ease-in-out infinite alternate;
+  display: inline-block;
+}
+
+@keyframes simCityFloat {
+  0% {
+    transform: translate(-50%, 0);
+  }
+  100% {
+    transform: translate(-50%, -60px); /* 向上位移，呈現浮動感 */
+  }
 }
 
 
