@@ -2693,8 +2693,8 @@ function renderStock() {
     const pnlSign = pnlAmt >= 0 ? '+' : '-';
     
     detailHTML = `
-      <div class="flex-1 flex flex-col justify-between">
-        <div>
+      <div class="flex-1 flex flex-col min-h-0">
+        <div class="flex-1 overflow-y-auto scroll min-h-0 pr-1">
           <div class="flex items-center justify-between pb-2 border-b border-[#26314a]">
             <div>
               <span class="display text-xl font-bold text-[#f5c451]">${s.name}</span>
@@ -2797,7 +2797,7 @@ function renderStock() {
           </div>
         </div>
         
-        <div class="grid grid-cols-2 gap-2 pt-3 border-t border-[#26314a] mt-4">
+        <div class="grid grid-cols-2 gap-2 pt-3 border-t border-[#26314a] mt-3 shrink-0">
           <button class="btn btn-green py-2 text-xs font-bold" onclick="tradeStock('buy')">📈 買入股票</button>
           <button class="btn btn-red py-2 text-xs font-bold" onclick="tradeStock('sell')">📉 賣出股票</button>
           <button class="btn btn-ghost py-2 text-[10px] font-bold" onclick="tradeStock('pledge')">🔒 股票質押 (70%)</button>
@@ -2822,14 +2822,16 @@ function renderStock() {
     </div>
     
     <div class="flex-1 flex gap-4 min-h-0 overflow-hidden">
-      <div class="w-1/2 border border-[#26314a] rounded-lg overflow-y-auto scroll bg-[#0f1422] p-1.5">
+      <div class="w-1/2 border border-[#26314a] rounded-lg overflow-y-auto scroll bg-[#0f1422] p-1.5 min-h-0">
         ${listHTML}
       </div>
-      <div class="w-1/2 border border-[#26314a] rounded-lg bg-[#0f1422] p-3 flex flex-col justify-between">
+      <div class="w-1/2 border border-[#26314a] rounded-lg bg-[#0f1422] p-3 flex flex-col min-h-0">
         ${detailHTML || '<div class="text-center text-xs text-[#8a98b3] mt-20">請從左側選擇股票進行操作</div>'}
       </div>
     </div>
   `;
+  // 渲染後立即計算一次預估總價（input 的 value 已預設，但 oninput 尚未觸發）
+  updateStockTotal();
 }
 
 function tradeStock(type) {
