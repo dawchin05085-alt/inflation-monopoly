@@ -318,7 +318,7 @@
         <button id="btnBuild" class="btn btn-ghost px-3.5 py-2 text-sm" onclick="openBuild()">🏠 蓋房升級</button>
         <button id="btnPlayers" class="btn btn-ghost px-3.5 py-2 text-sm" onclick="openPlayers()">👥 玩家狀態</button>
         <button id="btnLog" class="btn btn-ghost px-3.5 py-2 text-sm" onclick="openLog()">📜 事件紀錄</button>
-        <button id="btnSave" class="btn btn-ghost px-3.5 py-2 text-sm text-[#f5c451] border-[#f5c451]/30 hover:border-[#f5c451]" onclick="openSaveGameModal()">💾 儲存戰局</button>
+        <button id="btnSave" class="btn btn-ghost px-3.5 py-2 text-sm text-[#f5c451] border-[#f5c451]/30 hover:border-[#f5c451]" onclick="openSaveGameModal()">⚙️ 系統 / 存檔</button>
         <button id="btnEnd" class="btn btn-ghost px-4 py-2 text-sm" onclick="manualEnd()" disabled style="opacity: 0.4;">⏭ 結束回合</button>
       </div>
     </div>
@@ -401,45 +401,62 @@
   <div id="savePanel" class="overlay" style="display: none; z-index: 95;">
     <div class="card pop scroll" style="max-width: 500px; width: 100%; padding: 20px; max-height: 90vh; overflow: auto;">
       <div class="flex items-center justify-between mb-3 border-b border-[#26314a] pb-2">
-        <div class="display text-xl font-bold text-[#f5c451]">💾 儲存目前戰局</div>
+        <div class="display text-xl font-bold text-[#f5c451]">⚙️ 系統與存檔</div>
         <button class="btn btn-ghost px-3 py-1 text-xs" onclick="closeSaveGameModal()">關閉 ✕</button>
       </div>
       
-      <div class="text-xs text-[#8a98b3] mb-4 leading-relaxed">
-        您可以選擇將戰局儲存至瀏覽器的本地槽位，或下載 JSON 檔案備份至電腦中。
+      <!-- 訪客專用提示 -->
+      <div id="guestSaveMsg" class="text-xs text-[#8a98b3] mb-4 leading-relaxed" style="display: none;">
+        線上對戰由房主負責儲存/載入戰局，房客僅能在此主動認輸。
       </div>
       
-      <div class="space-y-3">
-        <!-- 槽位 1 -->
-        <div class="p-3 border border-[#26314a] rounded-lg bg-[#121826] flex items-center justify-between">
-          <div>
-            <div class="font-bold text-xs text-[#e6edf7]">本地存檔槽 1</div>
-            <div id="saveSlotInfo1" class="text-[10px] text-[#8a98b3] mt-1">無存檔資料</div>
-          </div>
-          <button class="btn btn-gold px-3.5 py-1.5 text-xs" onclick="saveGameToLocalSlot(1)">覆蓋儲存</button>
+      <!-- 存檔存讀區 (僅房主/單機可見) -->
+      <div id="saveSection">
+        <div class="text-xs text-[#8a98b3] mb-4 leading-relaxed">
+          您可以選擇將戰局儲存至瀏覽器的本地槽位，或下載 JSON 檔案備份至電腦中。
         </div>
-        <!-- 槽位 2 -->
-        <div class="p-3 border border-[#26314a] rounded-lg bg-[#121826] flex items-center justify-between">
-          <div>
-            <div class="font-bold text-xs text-[#e6edf7]">本地存檔槽 2</div>
-            <div id="saveSlotInfo2" class="text-[10px] text-[#8a98b3] mt-1">無存檔資料</div>
+        
+        <div class="space-y-3">
+          <!-- 槽位 1 -->
+          <div class="p-3 border border-[#26314a] rounded-lg bg-[#121826] flex items-center justify-between">
+            <div>
+              <div class="font-bold text-xs text-[#e6edf7]">本地存檔槽 1</div>
+              <div id="saveSlotInfo1" class="text-[10px] text-[#8a98b3] mt-1">無存檔資料</div>
+            </div>
+            <button class="btn btn-gold px-3.5 py-1.5 text-xs" onclick="saveGameToLocalSlot(1)">覆蓋儲存</button>
           </div>
-          <button class="btn btn-gold px-3.5 py-1.5 text-xs" onclick="saveGameToLocalSlot(2)">覆蓋儲存</button>
+          <!-- 槽位 2 -->
+          <div class="p-3 border border-[#26314a] rounded-lg bg-[#121826] flex items-center justify-between">
+            <div>
+              <div class="font-bold text-xs text-[#e6edf7]">本地存檔槽 2</div>
+              <div id="saveSlotInfo2" class="text-[10px] text-[#8a98b3] mt-1">無存檔資料</div>
+            </div>
+            <button class="btn btn-gold px-3.5 py-1.5 text-xs" onclick="saveGameToLocalSlot(2)">覆蓋儲存</button>
+          </div>
+          <!-- 槽位 3 -->
+          <div class="p-3 border border-[#26314a] rounded-lg bg-[#121826] flex items-center justify-between">
+            <div>
+              <div class="font-bold text-xs text-[#e6edf7]">本地存檔槽 3</div>
+              <div id="saveSlotInfo3" class="text-[10px] text-[#8a98b3] mt-1">無存檔資料</div>
+            </div>
+            <button class="btn btn-gold px-3.5 py-1.5 text-xs" onclick="saveGameToLocalSlot(3)">覆蓋儲存</button>
+          </div>
         </div>
-        <!-- 槽位 3 -->
-        <div class="p-3 border border-[#26314a] rounded-lg bg-[#121826] flex items-center justify-between">
-          <div>
-            <div class="font-bold text-xs text-[#e6edf7]">本地存檔槽 3</div>
-            <div id="saveSlotInfo3" class="text-[10px] text-[#8a98b3] mt-1">無存檔資料</div>
-          </div>
-          <button class="btn btn-gold px-3.5 py-1.5 text-xs" onclick="saveGameToLocalSlot(3)">覆蓋儲存</button>
+        
+        <div class="border-t border-[#26314a] pt-4 mt-4 mb-2">
+          <button class="btn btn-ghost py-2.5 w-full text-xs font-bold text-[#34d399] border-[#34d399]/30 hover:border-[#34d399]" onclick="exportGameToJson()">
+            📥 下載存檔為 JSON 備份檔案
+          </button>
         </div>
       </div>
       
-      <div class="border-t border-[#26314a] pt-4 mt-4">
-        <button class="btn btn-ghost py-2.5 w-full text-xs font-bold text-[#34d399] border-[#34d399]/30 hover:border-[#34d399]" onclick="exportGameToJson()">
-          📥 下載存檔為 JSON 備份檔案
-        </button>
+      <!-- 系統操作區 (所有人可見，認輸/終止遊戲) -->
+      <div class="border-t border-[#26314a] pt-4 mt-4 space-y-2">
+        <div class="text-xs text-[#8a98b3] mb-2 font-bold">⚠️ 遊戲退出與終止</div>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="btnSurrender" class="btn btn-red py-2 text-xs font-bold" onclick="surrenderCurrentPlayer()">🏳️ 主動認輸</button>
+          <button id="btnTerminate" class="btn btn-ghost py-2 text-xs font-bold text-[#f87171] border-[#f87171]/30 hover:border-[#f87171] hover:bg-[#f87171]/10" onclick="terminateGameBtn()">⏹️ 終止遊戲</button>
+        </div>
       </div>
     </div>
   </div>

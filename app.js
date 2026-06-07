@@ -119,6 +119,7 @@ let connToHost = null;       // Guest 用：連接到 Host 的連線
 let guestConnections = [];  // Host 用：連接到 Guest 的連線清單
 let onlinePlayers = [];     // 儲存連線中玩家資訊 { peerId, name, icon }
 let lastActiveTurnIndex = -1;
+let gameEnded = false;
 
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -587,6 +588,7 @@ function startGame() {
     log('🎮 戰局已恢復！遊戲已啟動，祝您遊戲愉快。', 'var(--gold)');
     
     isLoadedGame = false;
+    gameEnded = false;
 
     if (playMode === 'online') {
       lastActiveTurnIndex = -1;
@@ -598,6 +600,7 @@ function startGame() {
   }
   
   clearActiveSession();
+  gameEnded = false;
 
   const itemCustom = {
     accel: Math.max(1, parseInt($('priceAccel').value) || 100),
@@ -3860,6 +3863,7 @@ function hostOnlineRoom() {
         }
       }
       else if (data.type === 'STATE_SYNC_REQUEST') {
+        if (gameEnded) return;
         // 房客同步資料過來，房主更新本地 state 並向所有人廣播
         if (state && data.state && data.state.inflationCount > state.inflationCount) {
           showInflationAlert();
@@ -3871,6 +3875,12 @@ function hostOnlineRoom() {
         });
         renderAll();
         checkTurnTransition();
+        
+        // 若只剩一名存活玩家，房主廣播強制結束遊戲並結算
+        if (alivePlayers().length <= 1) {
+          broadcastData({ type: 'FORCE_GAME_OVER' });
+          gameOver();
+        }
       }
     });
     
@@ -4004,6 +4014,7 @@ function joinOnlineRoom() {
       else if (data.type === 'GAME_START') {
         config = data.config;
         state = data.state;
+        gameEnded = false;
         
         buildMap();
         
@@ -4032,6 +4043,7 @@ function joinOnlineRoom() {
         checkTurnTransition();
       }
       else if (data.type === 'STATE_SYNC') {
+        if (gameEnded) return;
         if (state && data.state && data.state.inflationCount > state.inflationCount) {
           showInflationAlert();
         }
@@ -4042,6 +4054,7 @@ function joinOnlineRoom() {
       else if (data.type === 'RECONNECT_SUCCESS') {
         config = data.config;
         state = data.state;
+        gameEnded = false;
         
         buildMap();
         $('setupScreen').style.display = 'none';
@@ -4063,6 +4076,9 @@ function joinOnlineRoom() {
         
         lastActiveTurnIndex = -1;
         checkTurnTransition();
+      }
+      else if (data.type === 'FORCE_GAME_OVER') {
+        gameOver();
       }
       else if (data.type === 'RECONNECT_FAILED') {
         alertModal('重連失敗', `無法重新連回房間：${data.reason}`);
@@ -4151,8 +4167,18 @@ function moveStock(s, factor) {
 }
 
 function gameOver() {
+  if (gameEnded) return;
+  gameEnded = true;
   stopTimer();
   clearActiveSession();
+  
+  // 房主在線上模式終止時，廣播給所有房客
+  if (playMode === 'online' && peerRole === 'host') {
+    broadcastData({
+      type: 'FORCE_GAME_OVER'
+    });
+  }
+  
   const ranking = [...state.players].sort((a, b) => netWorth(b) - netWorth(a));
   const winner = alivePlayers()[0] || ranking[0];
   const rows = ranking.map((p, k) => `
@@ -4206,10 +4232,17 @@ window.saveGameToLocalSlot = saveGameToLocalSlot;
 // 開啟存檔視窗
 function openSaveGameModal() {
   if (playMode === 'online' && peerRole !== 'host') {
-    alertModal('權限不足', '只有房主才能儲存線上戰局。');
-    return;
+    // 房客：隱藏儲存與導出區，僅顯示系統退出/認輸操作
+    $('saveSection').style.display = 'none';
+    if ($('guestSaveMsg')) $('guestSaveMsg').style.display = 'block';
+  } else {
+    // 房主或單機玩家：顯示完整存讀檔與系統按鈕
+    $('saveSection').style.display = 'block';
+    if ($('guestSaveMsg')) $('guestSaveMsg').style.display = 'none';
+    updateSaveSlotsUI();
   }
-  updateSaveSlotsUI();
+  
+  updateSystemButtonsState();
   $('savePanel').style.display = 'flex';
 }
 window.openSaveGameModal = openSaveGameModal;
@@ -4219,6 +4252,107 @@ function closeSaveGameModal() {
   $('savePanel').style.display = 'none';
 }
 window.closeSaveGameModal = closeSaveGameModal;
+
+// 更新認輸/終止按鈕可用狀態
+function updateSystemButtonsState() {
+  if (!state) return;
+  const isMy = isMyTurn();
+  const activeP = curPlayer();
+  
+  // 獲取當前本機玩家物件
+  let myP = activeP;
+  if (playMode === 'online') {
+    myP = state.players.find(p => peer && p.peerId === peer.id);
+  }
+  
+  // 主動認輸按鈕 (btnSurrender)
+  const btnSurrender = $('btnSurrender');
+  if (btnSurrender) {
+    // 只有當前輪到自己，且自己存活時才能認輸
+    const canSurrender = isMy && myP && myP.alive;
+    btnSurrender.disabled = !canSurrender;
+    btnSurrender.style.opacity = canSurrender ? '1' : '0.4';
+  }
+  
+  // 終止遊戲按鈕 (btnTerminate)
+  const btnTerminate = $('btnTerminate');
+  if (btnTerminate) {
+    // 線上對戰僅房主有權終止，單機多人皆可
+    if (playMode === 'online' && peerRole !== 'host') {
+      btnTerminate.style.display = 'none';
+    } else {
+      btnTerminate.style.display = 'inline-block';
+    }
+  }
+}
+window.updateSystemButtonsState = updateSystemButtonsState;
+
+// 主動認輸
+async function surrenderCurrentPlayer() {
+  if (!state) return;
+  
+  if (!isMyTurn()) {
+    alertModal('⚠️ 無法認輸', '只能在您自己的回合主動認輸！');
+    return;
+  }
+  
+  const p = curPlayer();
+  if (!p || !p.alive) {
+    alertModal('⚠️ 無法認輸', '您已淘汰或無法進行此操作。');
+    return;
+  }
+  
+  closeSaveGameModal();
+  
+  const choice = await showChoice(
+    '🏳️ 確認主動認輸？',
+    `您確定要主動認輸嗎？<br>認輸後，您所有的資金將會歸零，持股與質押會被清空，所有名下房地產將無償歸還給銀行，並直接退出遊戲。`,
+    [
+      { label: '🏳️ 確定認輸', value: true, cls: 'btn-red' },
+      { label: '取消', value: false, cls: 'btn-ghost' }
+    ]
+  );
+  
+  if (choice) {
+    log(`🏳️ 玩家 <b>${p.name}</b> 選擇了主動認輸（宣告破產）。`, '#f87171');
+    declareBankruptcy(p); // 該方法內部已調用 syncState() 與 renderAll()
+    
+    // 延遲結束回合，確保狀態同步與宣示破產已傳遞
+    setTimeout(endTurn, 100);
+  }
+}
+window.surrenderCurrentPlayer = surrenderCurrentPlayer;
+
+// 手動終止遊戲
+async function terminateGameBtn() {
+  if (!state) return;
+  if (playMode === 'online' && peerRole !== 'host') {
+    alertModal('權限不足', '只有房主才能終止遊戲！');
+    return;
+  }
+  
+  closeSaveGameModal();
+  
+  const choice = await showChoice(
+    '⏹️ 確認終止遊戲？',
+    `您確定要立刻終止目前戰局嗎？<br>終止後，系統將結算所有玩家當前的總資產進行最終排名，並直接進入結算畫面。`,
+    [
+      { label: '⏹️ 終止遊戲', value: true, cls: 'btn-red' },
+      { label: '繼續遊戲', value: false, cls: 'btn-ghost' }
+    ]
+  );
+  
+  if (choice) {
+    log(`⏹️ 遊戲由${playMode === 'online' ? '房主' : '玩家'}手動終止，進行資產結算！`, '#ff5d5d');
+    if (playMode === 'online' && peerRole === 'host') {
+      broadcastData({
+        type: 'FORCE_GAME_OVER'
+      });
+    }
+    gameOver();
+  }
+}
+window.terminateGameBtn = terminateGameBtn;
 
 // 更新存檔槽顯示 UI
 function updateSaveSlotsUI() {
@@ -4423,6 +4557,7 @@ function autoReconnectBtn() {
         else if (data.type === 'GAME_START') {
           config = data.config;
           state = data.state;
+          gameEnded = false;
           
           buildMap();
           $('setupScreen').style.display = 'none';
@@ -4438,6 +4573,7 @@ function autoReconnectBtn() {
           checkTurnTransition();
         }
         else if (data.type === 'STATE_SYNC') {
+          if (gameEnded) return;
           if (state && data.state && data.state.inflationCount > state.inflationCount) {
             showInflationAlert();
           }
@@ -4448,6 +4584,7 @@ function autoReconnectBtn() {
         else if (data.type === 'RECONNECT_SUCCESS') {
           config = data.config;
           state = data.state;
+          gameEnded = false;
           
           buildMap();
           $('setupScreen').style.display = 'none';
@@ -4469,6 +4606,9 @@ function autoReconnectBtn() {
           
           lastActiveTurnIndex = -1;
           checkTurnTransition();
+        }
+        else if (data.type === 'FORCE_GAME_OVER') {
+          gameOver();
         }
         else if (data.type === 'RECONNECT_FAILED') {
           alertModal('重連失敗', `無法重新連回房間：${data.reason}`);
