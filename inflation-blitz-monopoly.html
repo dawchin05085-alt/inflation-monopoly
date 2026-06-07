@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>通膨閃電大富翁 · Inflation &amp; Blitz Monopoly</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@500;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0f17;--panel:#121826;--panel2:#1a2233;--line:#26314a;
+    --gold:#f5c451;--gold2:#ffe08a;--green:#34d399;--red:#f87171;
+    --blue:#60a5fa;--purple:#a78bfa;--txt:#e6edf7;--muted:#8a98b3;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:
+      radial-gradient(1200px 700px at 80% -10%,rgba(245,196,81,.08),transparent 60%),
+      radial-gradient(900px 600px at -10% 110%,rgba(96,165,250,.08),transparent 55%),
+      var(--bg);
+    color:var(--txt);font-family:'Noto Sans TC','Chakra Petch',sans-serif;overflow:hidden;
+  }
+  .display{font-family:'Chakra Petch','Noto Sans TC',sans-serif;letter-spacing:.5px}
+  .mono{font-family:'JetBrains Mono',monospace}
+  .card{background:linear-gradient(180deg,var(--panel),#0f1420);border:1px solid var(--line);border-radius:14px}
+  .scroll::-webkit-scrollbar{width:8px;height:8px}
+  .scroll::-webkit-scrollbar-thumb{background:#2c3a58;border-radius:8px}
+  .scroll::-webkit-scrollbar-track{background:transparent}
+  .glow{box-shadow:0 0 0 1px rgba(245,196,81,.5),0 0 22px rgba(245,196,81,.25)}
+  .btn{transition:.15s;border-radius:10px;font-weight:700;cursor:pointer;user-select:none}
+  .btn:active{transform:translateY(1px)}
+  .btn-gold{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#3a2a00}
+  .btn-gold:hover{filter:brightness(1.07)}
+  .btn-ghost{background:var(--panel2);border:1px solid var(--line);color:var(--txt)}
+  .btn-ghost:hover{border-color:var(--gold)}
+  .btn-red{background:linear-gradient(180deg,#ff8a8a,#ef4444);color:#3a0000}
+  .btn-green{background:linear-gradient(180deg,#6ee7b7,#10b981);color:#06241a}
+  .overlay{position:fixed;inset:0;background:rgba(4,7,12,.72);backdrop-filter:blur(6px);z-index:60;
+    display:flex;align-items:center;justify-content:center;padding:18px}
+  .pop{animation:pop .22s ease}
+  @keyframes pop{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+  @keyframes flash{0%{opacity:0}15%{opacity:1}85%{opacity:1}100%{opacity:0}}
+  .inflation-flash{animation:flash 1.8s forwards}
+  .die{width:58px;height:58px;border-radius:13px;background:linear-gradient(180deg,#fff,#dfe6f0);
+    display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr 1fr;padding:8px;gap:2px;box-shadow:0 6px 16px rgba(0,0,0,.5)}
+  .pip{background:#111;border-radius:50%;align-self:center;justify-self:center;width:10px;height:10px;visibility:hidden}
+  @keyframes roll{0%{transform:rotate(0) scale(1)}50%{transform:rotate(180deg) scale(1.12)}100%{transform:rotate(360deg) scale(1)}}
+  .rolling{animation:roll .5s}
+  .chip{font-size:10px;padding:2px 7px;border-radius:999px;border:1px solid var(--line)}
+  .timerbar{height:8px;border-radius:999px;background:#202a40;overflow:hidden}
+  .timerfill{height:100%;background:linear-gradient(90deg,var(--green),var(--gold));transition:width .25s linear}
+  .deity-badge{font-size:10px;padding:1px 6px;border-radius:6px;font-weight:700}
+  input[type=number]{font-family:'JetBrains Mono',monospace}
+  .seg{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;color:var(--txt)}
+  .seg:focus{outline:none;border-color:var(--gold)}
+  .log-line{border-left:2px solid var(--line);padding:3px 8px;margin-bottom:3px;font-size:12px;line-height:1.35}
+  /* 地圖 */
+  #mapViewport{position:absolute;inset:0;overflow:hidden;cursor:grab;background:
+     radial-gradient(900px 600px at 30% 20%,rgba(96,165,250,.06),transparent 60%),
+     radial-gradient(700px 500px at 80% 80%,rgba(245,196,81,.05),transparent 60%)}
+  #mapViewport.dragging{cursor:grabbing}
+  #mapWorld{position:absolute;left:0;top:0;transform-origin:0 0}
+  .mnode{position:absolute;transform:translate(-50%,-50%);width:148px;border:1px solid var(--line);
+    border-radius:11px;background:var(--panel2);padding:7px 8px 8px;box-shadow:0 4px 10px rgba(0,0,0,.35)}
+  .mnode .bar{height:6px;border-radius:3px;margin-bottom:4px}
+  .mnode .nname{font-size:15px;font-weight:700;line-height:1.12}
+  .mnode .nmeta{font-size:12.5px;color:var(--muted)}
+  .mnode .ngrp{font-size:11px;font-weight:700;margin-top:2px}
+  .mnode.hl{outline:2px solid var(--gold);box-shadow:0 0 16px rgba(245,196,81,.5)}
+  .mnode.fork{border-color:var(--gold)}
+  .pawn{width:18px;height:18px;border-radius:50%;border:2px solid #0b0f17;box-shadow:0 1px 4px rgba(0,0,0,.5);
+    font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:800;color:#0b0f17}
+  .mapbtn{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800}
+  .pcount{width:42px;height:42px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);
+    color:var(--txt);font-weight:800;cursor:pointer;font-family:'JetBrains Mono'}
+  .pcount.active{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#3a2a00;border-color:var(--gold)}
+</style>
+</head>
+<body class="h-full">
+
+<!-- ===================== 設定畫面 ===================== -->
+<div id="setupScreen" class="overlay" style="background:rgba(4,7,12,.96);z-index:80">
+  <div class="card pop scroll" style="max-width:820px;width:100%;padding:26px;max-height:92vh;overflow:auto">
+    <div class="flex items-center gap-3 mb-1">
+      <div class="display text-3xl font-bold" style="color:var(--gold)">通膨閃電大富翁</div>
+      <span class="chip mono" style="color:var(--green);border-color:var(--green)">BLITZ · BRANCHING MAP</span>
+    </div>
+    <div class="text-sm mb-5" style="color:var(--muted)">岔路大地圖 · 20 檔股市走勢 · 2–8 人 · 自訂通膨</div>
+
+    <label class="text-xs" style="color:var(--muted)">玩家人數（點選 2–8）</label>
+    <div id="pcountRow" class="flex gap-2 mt-1 mb-4 flex-wrap"></div>
+
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div><label class="text-xs" style="color:var(--muted)">回合時限（秒，0=無限）</label><input id="cfgTime" type="number" min="0" value="30" class="seg mt-1"></div>
+      <div><label class="text-xs" style="color:var(--muted)">通膨觸發（每幾輪）</label><input id="cfgInfTurn" type="number" min="1" value="5" class="seg mt-1"></div>
+      <div><label class="text-xs" style="color:var(--muted)">通膨幅度（%）</label><input id="cfgInfRate" type="number" min="1" value="50" class="seg mt-1"></div>
+      <div><label class="text-xs" style="color:var(--muted)">初始現金</label><input id="cfgCash" type="number" min="0" value="25000" class="seg mt-1"></div>
+      <div><label class="text-xs" style="color:var(--muted)">初始銀行存款</label><input id="cfgSave" type="number" min="0" value="6000" class="seg mt-1"></div>
+    </div>
+
+    <div class="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3" id="nameInputs"></div>
+
+    <div class="mt-6 flex items-center justify-between flex-wrap gap-2">
+      <div class="text-xs" style="color:var(--muted)">提示：地圖有岔路，遇到分岔可選方向；時限歸零會自動擲骰、決策預設「否」。</div>
+      <button class="btn btn-gold px-7 py-3 text-lg display" onclick="startGame()">開始遊戲 ▸</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 主畫面 ===================== -->
+<div id="game" class="hidden h-full w-full" style="display:none">
+  <!-- 頂列 -->
+  <div class="absolute left-0 right-0 top-0 z-30 flex items-center justify-between" style="padding:10px 14px;gap:12px">
+    <div class="card flex items-center gap-3" style="padding:8px 14px">
+      <div class="display font-bold" style="color:var(--gold)">通膨閃電大富翁</div>
+      <span class="chip mono" id="roundChip">第 1 輪</span>
+      <span class="chip mono" id="infChip" style="color:var(--red)">×1.00</span>
+    </div>
+    <div class="card flex items-center gap-3" style="padding:8px 14px;min-width:340px">
+      <span class="pawn" id="turnPawn" style="background:var(--gold)">1</span>
+      <span class="font-bold" id="turnName">—</span>
+      <div class="flex-1">
+        <div class="flex justify-between text-xs"><span style="color:var(--muted)">回合時限</span><span class="mono" id="timerTxt" style="color:var(--gold)">--</span></div>
+        <div class="timerbar mt-1"><div id="timerFill" class="timerfill" style="width:100%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 地圖 -->
+  <div id="mapViewport">
+    <div id="mapWorld">
+      <svg id="mapEdges" style="position:absolute;left:0;top:0;overflow:visible"></svg>
+    </div>
+  </div>
+
+  <!-- 地圖控制 -->
+  <div class="absolute z-30 flex flex-col gap-2" style="right:14px;top:84px">
+    <button class="btn btn-gold mapbtn" title="回正（置中目前玩家）" onclick="recenter()">⌖</button>
+    <button class="btn btn-ghost mapbtn" title="放大" onclick="zoomBy(1.15)">＋</button>
+    <button class="btn btn-ghost mapbtn" title="縮小" onclick="zoomBy(.87)">－</button>
+  </div>
+
+  <!-- 中央骰子提示 -->
+  <div id="diePod" class="absolute z-30 card flex items-center gap-3" style="left:50%;transform:translateX(-50%);bottom:86px;padding:10px 16px">
+    <div id="die" class="die"><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div></div>
+    <div id="centerMsg" class="text-sm" style="color:var(--muted);min-width:160px">準備開始</div>
+  </div>
+
+  <!-- 底部操作列 -->
+  <div class="absolute left-0 right-0 bottom-0 z-30 flex justify-center" style="padding:12px">
+    <div class="card flex items-center gap-2 flex-wrap justify-center" style="padding:10px 14px">
+      <button id="btnRoll" class="btn btn-gold px-6 py-2" onclick="onRollClick()">🎲 擲骰</button>
+      <button class="btn btn-ghost px-3 py-2" onclick="openStock()">📈 股市</button>
+      <button class="btn btn-ghost px-3 py-2" onclick="openItems()">🎴 道具</button>
+      <button class="btn btn-ghost px-3 py-2" onclick="openBuild()">🏠 蓋房</button>
+      <button class="btn btn-ghost px-3 py-2" onclick="openPlayers()">👥 玩家狀態</button>
+      <button class="btn btn-ghost px-3 py-2" onclick="openLog()">📜 事件紀錄</button>
+      <button id="btnEnd" class="btn btn-ghost px-3 py-2" onclick="manualEnd()">⏭ 結束回合</button>
+    </div>
+  </div>
+</div>
+
+<!-- 通用 Modal -->
+<div id="modal" class="overlay" style="display:none"><div id="modalBox" class="card pop" style="max-width:500px;width:100%;padding:22px"></div></div>
+<!-- 通膨警報 -->
+<div id="inflationAlert" class="overlay inflation-flash" style="display:none;background:rgba(60,8,8,.85);z-index:70">
+  <div class="text-center pop">
+    <div class="display font-black" style="font-size:64px;color:#ff5d5d;text-shadow:0 0 30px rgba(255,80,80,.6)">⚠ 通膨爆發</div>
+    <div id="inflationAlertSub" class="display text-2xl mt-2" style="color:var(--gold)"></div>
+  </div>
+</div>
+<!-- 股市面板 -->
+<div id="stockPanel" class="overlay" style="display:none"><div class="card pop" style="max-width:940px;width:100%;padding:18px;max-height:92vh;display:flex;flex-direction:column"><div id="stockBody" style="display:flex;flex-direction:column;min-height:0"></div></div></div>
+<!-- 道具面板 -->
+<div id="itemPanel" class="overlay" style="display:none"><div class="card pop scroll" style="max-width:560px;width:100%;padding:20px;max-height:90vh;overflow:auto"><div id="itemBody"></div></div></div>
+<!-- 蓋房面板 -->
+<div id="buildPanel" class="overlay" style="display:none"><div class="card pop scroll" style="max-width:600px;width:100%;padding:20px;max-height:90vh;overflow:auto"><div id="buildBody"></div></div></div>
+<!-- 玩家狀態面板 -->
+<div id="playersPanel" class="overlay" style="display:none"><div class="card pop scroll" style="max-width:880px;width:100%;padding:20px;max-height:90vh;overflow:auto"><div id="playersBody"></div></div></div>
+<!-- 事件紀錄面板 -->
+<div id="logPanel" class="overlay" style="display:none"><div class="card pop" style="max-width:560px;width:100%;padding:20px;max-height:90vh;display:flex;flex-direction:column">
+  <div class="flex items-center justify-between mb-3"><div class="display text-xl font-bold" style="color:var(--gold)">📜 事件紀錄</div><button class="btn btn-ghost px-3 py-1" onclick="closeLog()">關閉 ✕</button></div>
+  <div id="log" class="scroll" style="overflow:auto;flex:1"></div>
+</div></div>
+
+<script>
+/* =========================================================
+   常數
+========================================================= */
+const PLAYER_COLORS=['#f5c451','#60a5fa','#f87171','#34d399','#a78bfa','#fb923c','#22d3ee','#f472b6'];
+const PLAYER_DEF_NAMES=['紅頂富商','藍鯨集團','烈焰財團','翡翠資本','紫晶控股','橙海投資','青雲航運','緋櫻地產'];
+const SALARY_BASE=3000;
+const HOUSE_MULT=[1,2,3.5,5.5,8];
+const HOUSE_LABEL=['空地','一級','二級','三級','地標'];
+
+const DEITIES={
+  land:{name:'土地公',icon:'⛩️',color:'#a3e635'},
+  fortune:{name:'財神',icon:'💰',color:'#fbbf24'},
+  happy:{name:'福神',icon:'🎎',color:'#f472b6'},
+  poor:{name:'窮神',icon:'🪙',color:'#94a3b8'},
+  bad:{name:'衰神',icon:'💀',color:'#7c8597'},
+};
+const ITEMS={
+  accel:{name:'通膨加速卡',icon:'🔥',price:2500,desc:'立即觸發一次全域通膨循環。'},
+  freeze:{name:'經濟凍結卡',icon:'❄️',price:2200,desc:'未來 5 輪停止通膨。'},
+  tsunami:{name:'金融海嘯卡',icon:'🌊',price:2800,desc:'指定玩家租金 -50%，持續 3 回合。'},
+  dice:{name:'遙控骰子',icon:'🎯',price:1800,desc:'自選前進 1-6 步。'},
+  barricade:{name:'路障',icon:'🚧',price:1200,desc:'前方放置路障，他人經過即停下。'},
+  summon:{name:'請神符',icon:'📜',price:2000,desc:'隨機召喚神明附身自己。'},
+  dismiss:{name:'送神符',icon:'🧧',price:1500,desc:'送走自己身上的神明。'},
+};
+const PROP_NAMES=['夜市攤位','文創小店','捷運商圈','海濱別墅','科技園區','金融中心','觀光飯店','工業廠房',
+  '購物商場','半導體廠','私人島嶼','太空基地','溫泉會館','遊艇碼頭','電競館','雲端機房',
+  '釀酒莊園','賽車場','美術館','摩天輪','數據中心','綠能電廠','時尚精品','百貨總店'];
+
+/* 漲跌停限制（每「日／輪」相對前一收盤 ±10%） */
+const STOCK_LIMIT=0.10;
+/* 股票分類 */
+const STOCK_CATS={
+  tech:{label:'科技',color:'#60a5fa'},
+  semi:{label:'半導體',color:'#818cf8'},
+  ai:{label:'AI',color:'#a78bfa'},
+  fin:{label:'金融',color:'#f5c451'},
+  energy:{label:'能源',color:'#fb923c'},
+  bio:{label:'生技',color:'#34d399'},
+  ship:{label:'航運',color:'#22d3ee'},
+  consume:{label:'消費',color:'#f472b6'},
+  material:{label:'原物料',color:'#d6b370'},
+  reit:{label:'不動產',color:'#94f9c0'},
+  game:{label:'娛樂',color:'#f87171'},
+};
+/* 32 檔股票：[代號,名稱,分類,初始價] */
+const STOCK_DEF=[
+  ['SOFT','雲端軟體','tech',320],['NET','網路平台','tech',260],['DATA','大數據','tech',180],
+  ['TSMC','晶圓代工','semi',540],['MEM','記憶體廠','semi',330],['IC','IC設計','semi',420],
+  ['AIX','人工智慧','ai',680],['ROBO','機器人','ai',360],['GPU','加速運算','ai',720],
+  ['BANK','第一金控','fin',75],['INSU','人壽保險','fin',90],['SEC','綜合證券','fin',110],
+  ['OIL','石化能源','energy',180],['SOLR','太陽能','energy',120],['WIND','離岸風電','energy',140],
+  ['BIO','生技新藥','bio',310],['PHAR','製藥龍頭','bio',480],['MED','醫療器材','bio',230],
+  ['SHIP','航運之星','ship',130],['AIR','星際航空','ship',95],['PORT','港務物流','ship',150],
+  ['FOOD','連鎖餐飲','consume',60],['RETL','量販零售','consume',85],['BEV','飲料食品','consume',70],
+  ['STEEL','鋼鐵','material',160],['GOLD','黃金礦業','material',410],['CHEM','化工','material',190],
+  ['REIT','不動產信託','reit',150],['LAND','土地開發','reit',210],
+  ['GAME','遊戲娛樂','game',210],['META','元宇宙','game',90],['FILM','影視傳媒','game',120],
+];
+
+/* =========================================================
+   狀態
+========================================================= */
+let config={};let state=null;
+let timer={id:null,total:0,remaining:0};
+let modalResolver=null;let busy=false;let rolledThisTurn=false;
+let view={x:0,y:0,zoom:.62};let bbox={minX:0,minY:0,maxX:0,maxY:0};
+
+const $=id=>document.getElementById(id);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const rnd=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+const pick=a=>a[rnd(0,a.length-1)];
+function inf(a){return Math.round(a*state.inflationMult);}
+function construct(){return state.rateHikeTurns>0?1.3:1;}
+function fmt(n){return Math.round(n).toLocaleString('en-US');}
+function curPlayer(){return state.players[state.current];}
+function alivePlayers(){return state.players.filter(p=>p.alive);}
+function hasDeity(p,t){return p.deity&&p.deity.type===t;}
+function log(msg,color){const d=document.createElement('div');d.className='log-line';if(color)d.style.borderLeftColor=color;d.innerHTML=msg;$('log').prepend(d);}
+
+/* =========================================================
+   設定畫面
+========================================================= */
+let selPlayers=4;
+function buildPcount(){
+  const row=$('pcountRow');row.innerHTML='';
+  for(let n=2;n<=8;n++){
+    const b=document.createElement('button');
+    b.className='pcount'+(n===selPlayers?' active':'');b.textContent=n;
+    b.onclick=()=>{selPlayers=n;buildPcount();buildNameInputs();};
+    row.appendChild(b);
+  }
+}
+function buildNameInputs(){
+  const box=$('nameInputs');box.innerHTML='';
+  for(let i=0;i<selPlayers;i++){
+    box.innerHTML+=`<div>
+      <label class="text-xs flex items-center gap-1" style="color:var(--muted)">
+        <span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:${PLAYER_COLORS[i]}"></span>玩家 ${i+1}
+      </label><input id="name${i}" class="seg mt-1" value="${PLAYER_DEF_NAMES[i]}"></div>`;
+  }
+}
+buildPcount();buildNameInputs();
+
+/* =========================================================
+   地圖生成（含岔路）
+========================================================= */
+let MAP={nodes:[],adj:{}};
+function ptOnRect(t,r){
+  const peri=2*(r.w+r.h);let d=t*peri;
+  if(d<r.w)return{x:r.x+d,y:r.y};d-=r.w;
+  if(d<r.h)return{x:r.x+r.w,y:r.y+d};d-=r.h;
+  if(d<r.w)return{x:r.x+r.w-d,y:r.y+r.h};d-=r.w;
+  return{x:r.x,y:r.y+r.h-d};
+}
+function addEdge(a,b){(MAP.adj[a]=MAP.adj[a]||[]).push(b);(MAP.adj[b]=MAP.adj[b]||[]).push(a);}
+function buildMap(){
+  MAP={nodes:[],adj:{}};
+  const rect={x:160,y:170,w:1700,h:1040};
+  const N=28;
+  for(let i=0;i<N;i++){const p=ptOnRect(i/N,rect);MAP.nodes.push({id:i,x:p.x,y:p.y});}
+  for(let i=0;i<N;i++)addEdge(i,(i+1)%N);
+  const cx=rect.x+rect.w/2;
+  // 中央捷徑橋：節點4(上方中段) 連到 18(下方中段)
+  const b=[{id:N,x:cx,y:rect.y+rect.h*0.30},{id:N+1,x:cx,y:rect.y+rect.h*0.50},{id:N+2,x:cx,y:rect.y+rect.h*0.70}];
+  MAP.nodes.push(...b);
+  addEdge(4,N);addEdge(N,N+1);addEdge(N+1,N+2);addEdge(N+2,18);
+  // 右側繞道：節點10 連到 12，凸出右方
+  const rx=rect.x+rect.w+200;
+  const d=[{id:N+3,x:rx,y:MAP.nodes[10].y+60},{id:N+4,x:rx,y:MAP.nodes[12].y-60}];
+  MAP.nodes.push(...d);
+  addEdge(10,N+3);addEdge(N+3,N+4);addEdge(N+4,12);
+  // 左側繞道：節點24 連到 26，凸出左方
+  const lx=rect.x-200;
+  const e=[{id:N+5,x:lx,y:MAP.nodes[24].y-40},{id:N+6,x:lx,y:MAP.nodes[26].y+40}];
+  MAP.nodes.push(...e);
+  addEdge(24,N+5);addEdge(N+5,N+6);addEdge(N+6,26);
+
+  // 指定特殊格類型
+  const special={0:'start',2:'fate',5:'shop',7:'stock',9:'news',11:'bank',
+    14:'fate',16:'shop',19:'stock',21:'news',23:'jail',26:'fate',
+    [N]:'stock',[N+1]:'fate',[N+2]:'shop',[N+3]:'news',[N+6]:'bank'};
+  const forkSet=new Set([4,18,10,12,24,26]); // 分岔點設為廣場
+  // 路段定義：依序把屬性地分組，整段被同一人買下時租金加倍
+  const GROUPS=[
+    {name:'老城商圈',color:'#a16207',size:2},{name:'濱海特區',color:'#0e7490',size:2},
+    {name:'科技走廊',color:'#1d4ed8',size:3},{name:'金融大道',color:'#b45309',size:2},
+    {name:'工業重鎮',color:'#4d7c0f',size:2},{name:'觀光勝地',color:'#be185d',size:2},
+    {name:'頂級地段',color:'#7c3aed',size:3},{name:'新興開發',color:'#0f766e',size:2},
+  ];
+  let pIdx=0,grpIdx=0,grpLeft=GROUPS[0].size;
+  MAP.nodes.forEach(n=>{
+    if(forkSet.has(n.id)){n.type='plaza';n.name='轉運廣場';return;}
+    if(special[n.id]){n.type=special[n.id];n.name={start:'起點',fate:'命運',news:'新聞快報',shop:'道具商店',stock:'證券交易所',bank:'中央銀行',jail:'監獄/休息'}[special[n.id]];return;}
+    // 屬性地
+    n.type='property';n.name=PROP_NAMES[pIdx%PROP_NAMES.length];
+    n.basePrice=800+pIdx*180;n.baseRent=Math.round((800+pIdx*180)*0.1);
+    n.owner=null;n.level=0;
+    // 指派路段
+    if(grpLeft<=0){grpIdx=(grpIdx+1)%GROUPS.length;grpLeft=GROUPS[grpIdx].size;}
+    n.group=grpIdx;n.groupName=GROUPS[grpIdx].name;n.groupColor=GROUPS[grpIdx].color;
+    grpLeft--;pIdx++;
+  });
+  // 計算邊界
+  bbox={minX:1e9,minY:1e9,maxX:-1e9,maxY:-1e9};
+  MAP.nodes.forEach(n=>{bbox.minX=Math.min(bbox.minX,n.x);bbox.minY=Math.min(bbox.minY,n.y);bbox.maxX=Math.max(bbox.maxX,n.x);bbox.maxY=Math.max(bbox.maxY,n.y);});
+}
+function nodeById(id){return MAP.nodes.find(n=>n.id===id);}
+
+/* =========================================================
+   開始遊戲
+========================================================= */
+function startGame(){
+  config={
+    players:selPlayers,
+    timeLimit:Math.max(0,parseInt($('cfgTime').value)||0),
+    infTurn:Math.max(1,parseInt($('cfgInfTurn').value)||5),
+    infRate:Math.max(1,parseInt($('cfgInfRate').value)||50),
+    cash:Math.max(0,parseInt($('cfgCash').value)||0),
+    save:Math.max(0,parseInt($('cfgSave').value)||0),
+  };
+  buildMap();
+  const players=[];
+  for(let i=0;i<selPlayers;i++){
+    players.push({id:i,name:($('name'+i)?.value||PLAYER_DEF_NAMES[i]),color:PLAYER_COLORS[i],
+      cash:config.cash,savings:config.save,node:0,from:27,
+      stocks:{},pledged:{},items:[pick(Object.keys(ITEMS))],deity:null,alive:true,tsunamiTurns:0,skip:false});
+  }
+  state={players,current:0,round:1,inflationMult:1,inflationCount:0,freezeTurns:0,rateHikeTurns:0,
+    barricades:{},selStock:STOCK_DEF[0][0],selCat:'all',
+    stocks:STOCK_DEF.map(s=>({ticker:s[0],name:s[1],cat:s[2],price:s[3],prev:s[3],ref:s[3],hist:[s[3]],limit:0}))};
+  $('setupScreen').style.display='none';
+  $('game').style.display='block';$('game').classList.remove('hidden');
+  buildMapDOM();renderAll();recenter(true);
+  log('🎮 遊戲開始！地圖有岔路與捷徑，祝你在通膨中存活。','var(--gold)');
+  beginTurn();
+}
+
+/* =========================================================
+   地圖渲染
+========================================================= */
+function tileColor(n){
+  if(n.type==='property')return n.owner===null?'#34415f':state.players[n.owner].color;
+  return {start:'#34d399',fate:'#a78bfa',news:'#f59e0b',shop:'#22d3ee',stock:'#60a5fa',bank:'#f5c451',jail:'#f87171',plaza:'#e879f9'}[n.type]||'#34415f';
+}
+function tileIcon(n){if(n.type==='property')return'🏙';return{start:'🚩',fate:'🃏',news:'📰',shop:'🛒',stock:'📈',bank:'🏦',jail:'⛓',plaza:'🔀'}[n.type]||'';}
+function buildMapDOM(){
+  const world=$('mapWorld');
+  [...world.querySelectorAll('.mnode')].forEach(e=>e.remove());
+  // 邊
+  const svg=$('mapEdges');svg.innerHTML='';
+  const seen=new Set();
+  Object.keys(MAP.adj).forEach(a=>{MAP.adj[a].forEach(b=>{
+    const key=Math.min(a,b)+'-'+Math.max(a,b);if(seen.has(key))return;seen.add(key);
+    const na=nodeById(+a),nb=nodeById(+b);
+    const ln=document.createElementNS('http://www.w3.org/2000/svg','line');
+    ln.setAttribute('x1',na.x);ln.setAttribute('y1',na.y);ln.setAttribute('x2',nb.x);ln.setAttribute('y2',nb.y);
+    ln.setAttribute('stroke','#2b3a59');ln.setAttribute('stroke-width','10');ln.setAttribute('stroke-linecap','round');
+    svg.appendChild(ln);
+  });});
+  svg.setAttribute('width',bbox.maxX+200);svg.setAttribute('height',bbox.maxY+200);
+  world.style.width=(bbox.maxX+200)+'px';world.style.height=(bbox.maxY+200)+'px';
+  // 節點
+  MAP.nodes.forEach(n=>{
+    const isFork=(MAP.adj[n.id]||[]).length>2;
+    const el=document.createElement('div');
+    el.className='mnode'+(isFork?' fork':'');el.id='node'+n.id;
+    el.style.left=n.x+'px';el.style.top=n.y+'px';
+    el.innerHTML=`<div class="bar" id="bar${n.id}"></div>
+      <div class="nname">${tileIcon(n)} ${n.name}</div>
+      <div id="meta${n.id}" class="nmeta mono"></div>
+      <div id="grp${n.id}" class="ngrp"></div>
+      <div id="pawns${n.id}" style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px;min-height:18px"></div>`;
+    world.appendChild(el);
+  });
+  applyView();
+}
+function updateMap(){
+  MAP.nodes.forEach(n=>{
+    const bar=$('bar'+n.id);if(bar)bar.style.background=tileColor(n);
+    const meta=$('meta'+n.id);
+    if(meta){
+      let t='';
+      if(n.type==='property'){t=`$${fmt(inf(n.basePrice))}`+(n.level>0?` · ${HOUSE_LABEL[n.level]}`:'');}
+      if(state.barricades[n.id])t='🚧 路障 '+t;
+      meta.textContent=t;
+    }
+    const grp=$('grp'+n.id);
+    if(grp){
+      if(n.type==='property'){const mono=isMonopoly(n);
+        grp.innerHTML=`<span style="color:${n.groupColor}">▰ ${n.groupName}</span>${mono?' <span style="color:'+n.groupColor+'">👑壟斷</span>':''}`;}
+      else grp.innerHTML='';
+    }
+    const box=$('pawns'+n.id);if(box){box.innerHTML='';
+      state.players.filter(p=>p.alive&&p.node===n.id).forEach(p=>{
+        const d=document.createElement('div');d.className='pawn';d.style.background=p.color;d.textContent=p.id+1;box.appendChild(d);});
+    }
+    const el=$('node'+n.id);if(el)el.classList.toggle('hl',n.id===curPlayer().node);
+  });
+}
+function applyView(){$('mapWorld').style.transform=`translate(${view.x}px,${view.y}px) scale(${view.zoom})`;}
+function recenter(initial){
+  const vp=$('mapViewport');const w=vp.clientWidth,h=vp.clientHeight;
+  const n=nodeById(curPlayer().node);
+  if(initial){const cx=(bbox.minX+bbox.maxX)/2,cy=(bbox.minY+bbox.maxY)/2;
+    view.zoom=Math.min(w/(bbox.maxX-bbox.minX+360),h/(bbox.maxY-bbox.minY+360),.8);
+    view.x=w/2-cx*view.zoom;view.y=h/2-cy*view.zoom;}
+  else{view.x=w/2-n.x*view.zoom;view.y=h/2-n.y*view.zoom;}
+  applyView();
+}
+function zoomBy(f){view.zoom=Math.max(.3,Math.min(1.4,view.zoom*f));applyView();}
+// 平移：滑鼠中鍵 或 背景左鍵拖曳
+(function(){
+  const vp=$('mapViewport');let drag=false,sx,sy,ox,oy;
+  vp.addEventListener('mousedown',e=>{
+    if(e.button===1||(e.button===0&&(e.target===vp||e.target.id==='mapWorld'||e.target.tagName==='svg'||e.target.tagName==='line'))){
+      drag=true;sx=e.clientX;sy=e.clientY;ox=view.x;oy=view.y;vp.classList.add('dragging');e.preventDefault();}
+  });
+  window.addEventListener('mousemove',e=>{if(!drag)return;view.x=ox+(e.clientX-sx);view.y=oy+(e.clientY-sy);applyView();});
+  window.addEventListener('mouseup',()=>{drag=false;vp.classList.remove('dragging');});
+  vp.addEventListener('wheel',e=>{e.preventDefault();zoomBy(e.deltaY<0?1.1:.9);},{passive:false});
+  vp.addEventListener('auxclick',e=>{if(e.button===1)e.preventDefault();});
+})();
+
+/* =========================================================
+   面板：玩家狀態 / 紀錄
+========================================================= */
+function netWorth(p){
+  let w=p.cash+p.savings;
+  MAP.nodes.forEach(n=>{if(n.type==='property'&&n.owner===p.id)w+=inf(n.basePrice)+n.level*inf(n.basePrice)*0.6;});
+  Object.keys(p.stocks).forEach(tk=>w+=p.stocks[tk]*stockPrice(tk));
+  Object.keys(p.pledged).forEach(tk=>w+=p.pledged[tk].shares*stockPrice(tk)-p.pledged[tk].loan);
+  return Math.round(w);
+}
+function deityBadge(p){if(!p.deity)return'';const d=DEITIES[p.deity.type];
+  return `<span class="deity-badge" style="background:${d.color}22;color:${d.color};border:1px solid ${d.color}55">${d.icon}${d.name}${p.deity.big?'★':''} ${p.deity.turns}T</span>`;}
+function openPlayers(){renderPlayers();$('playersPanel').style.display='flex';}
+function closePlayers(){$('playersPanel').style.display='none';}
+function renderPlayers(){
+  const cards=state.players.map(p=>{
+    const active=p.id===state.current;
+    const stocksTxt=Object.keys(p.stocks).filter(k=>p.stocks[k]>0).map(k=>`${k}×${p.stocks[k]}`).join(' ')||'—';
+    const pledgeTxt=Object.keys(p.pledged).map(k=>`${k}質${p.pledged[k].shares}`).join(' ');
+    const props=MAP.nodes.filter(n=>n.type==='property'&&n.owner===p.id).length;
+    return `<div class="card ${active?'glow':''}" style="padding:11px;${p.alive?'':'opacity:.4'}">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2"><span class="pawn" style="background:${p.color}">${p.id+1}</span><span class="font-bold">${p.name}</span></div>
+        ${p.alive?(active?'<span class="chip" style="color:var(--green)">行動中</span>':''):''}${p.alive?'':'<span class="chip" style="color:var(--red)">破產</span>'}
+      </div>
+      <div class="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-sm">
+        <div style="color:var(--muted)">現金</div><div class="mono text-right" style="color:var(--gold)">$${fmt(p.cash)}</div>
+        <div style="color:var(--muted)">存款</div><div class="mono text-right" style="color:var(--green)">$${fmt(p.savings)}</div>
+        <div style="color:var(--muted)">土地</div><div class="mono text-right">${props} 筆</div>
+        <div style="color:var(--muted)">身價</div><div class="mono text-right">$${fmt(netWorth(p))}</div>
+      </div>
+      <div class="text-xs mt-1" style="color:var(--muted)">持股：<span style="color:var(--blue)">${stocksTxt}</span></div>
+      ${pledgeTxt?`<div class="text-xs" style="color:var(--purple)">質押：${pledgeTxt}</div>`:''}
+      <div class="text-xs mt-1" style="color:var(--muted)">道具 ${p.items.length} 張</div>
+      <div class="mt-1 flex flex-wrap gap-1">${deityBadge(p)}${p.tsunamiTurns>0?`<span class="deity-badge" style="background:#1e3a8a55;color:#93c5fd">🌊海嘯${p.tsunamiTurns}T</span>`:''}</div>
+    </div>`;
+  }).join('');
+  $('playersBody').innerHTML=`
+    <div class="flex items-center justify-between mb-3"><div class="display text-xl font-bold" style="color:var(--gold)">👥 玩家狀態</div><button class="btn btn-ghost px-3 py-1" onclick="closePlayers()">關閉 ✕</button></div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">${cards}</div>`;
+}
+function openLog(){$('logPanel').style.display='flex';}
+function closeLog(){$('logPanel').style.display='none';}
+
+function renderAll(){
+  updateMap();
+  $('roundChip').textContent='第 '+state.round+' 輪';
+  $('infChip').textContent='×'+state.inflationMult.toFixed(2);
+  const p=curPlayer();$('turnPawn').style.background=p.color;$('turnPawn').textContent=p.id+1;$('turnName').textContent=p.name;
+  if($('playersPanel').style.display==='flex')renderPlayers();
+}
+
+/* =========================================================
+   骰子 / 計時器
+========================================================= */
+const PIP_MAP={1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
+function showDie(v){$('die').querySelectorAll('.pip').forEach((p,i)=>p.style.visibility=PIP_MAP[v].includes(i)?'visible':'hidden');}
+async function animateDie(v){const d=$('die');d.classList.remove('rolling');void d.offsetWidth;d.classList.add('rolling');for(let k=0;k<6;k++){showDie(rnd(1,6));await sleep(70);}showDie(v);}
+
+function startTimer(){
+  stopTimer();
+  if(config.timeLimit<=0){$('timerTxt').textContent='∞';$('timerFill').style.width='100%';return;}
+  timer.total=config.timeLimit;timer.remaining=config.timeLimit;updateTimerUI();
+  timer.id=setInterval(()=>{timer.remaining-=0.25;if(timer.remaining<=0){timer.remaining=0;updateTimerUI();onTimeout();}else updateTimerUI();},250);
+}
+function stopTimer(){if(timer.id){clearInterval(timer.id);timer.id=null;}}
+function updateTimerUI(){if(config.timeLimit<=0)return;$('timerTxt').textContent=Math.ceil(timer.remaining)+'s';
+  const pct=timer.total?timer.remaining/timer.total*100:0;$('timerFill').style.width=pct+'%';
+  $('timerFill').style.background=pct<30?'linear-gradient(90deg,#f87171,#f5c451)':'linear-gradient(90deg,#34d399,#f5c451)';}
+async function onTimeout(){
+  stopTimer();state.auto=true;
+  if(modalResolver){const r=modalResolver;modalResolver=null;$('modal').style.display='none';r(false);}
+  closePanels();$('centerMsg').textContent='⏰ 時間到！自動處理…';
+  if(!rolledThisTurn&&!busy)await doRoll();
+}
+
+/* =========================================================
+   決策 Modal
+========================================================= */
+function showChoice(title,html,options){
+  if(state.auto){const f=options.find(o=>o.value===false);if(f)return Promise.resolve(f.value);const d=options.find(o=>o.def);return Promise.resolve((d||options[0]).value);}
+  return new Promise(resolve=>{
+    modalResolver=resolve;
+    const btns=options.map((o,k)=>`<button class="btn ${o.cls||'btn-ghost'} px-4 py-2 mb-1" onclick="resolveChoice(${k})">${o.label}</button>`).join('');
+    $('modalBox').innerHTML=`<div class="display text-xl font-bold mb-2" style="color:var(--gold)">${title}</div>
+      <div class="text-sm mb-4" style="color:var(--txt)">${html}</div><div class="flex flex-wrap gap-2 justify-end">${btns}</div>`;
+    $('modal').style.display='flex';$('modalBox')._opts=options;
+  });
+}
+function resolveChoice(k){const opts=$('modalBox')._opts;if(!modalResolver)return;const r=modalResolver;modalResolver=null;$('modal').style.display='none';r(opts[k].value);}
+function alertModal(t,h){return showChoice(t,h,[{label:'確定',value:true,cls:'btn-gold'}]);}
+
+/* =========================================================
+   回合流程
+========================================================= */
+async function beginTurn(){
+  const p=curPlayer();if(!p.alive)return endTurn();
+  busy=false;rolledThisTurn=false;state.auto=false;
+  $('btnRoll').disabled=false;$('btnRoll').style.opacity='1';
+  recenter();renderAll();
+
+  if(p.deity){p.deity.turns--;if(p.deity.turns<=0){log(`${DEITIES[p.deity.type].icon} <b>${p.name}</b> 的${DEITIES[p.deity.type].name}離開了。`,DEITIES[p.deity.type].color);p.deity=null;}}
+  if(p.tsunamiTurns>0)p.tsunamiTurns--;
+  await checkMarginCall(p);
+  if(hasDeity(p,'poor')){const drain=inf(p.deity.big?1500:400);p.cash-=drain;log(`🪙 <b>${p.name}</b> 被窮神纏身，損失 $${fmt(drain)}。`,DEITIES.poor.color);if(p.cash<0)await settleNegative(p);}
+  renderAll();
+  if(p.skip){p.skip=false;$('centerMsg').textContent=`${p.name} 暫停一回合`;await alertModal('暫停回合',`<b>${p.name}</b> 正在監獄/休息，本回合暫停。`);return endTurn();}
+  if(!p.alive)return endTurn();
+  $('centerMsg').textContent=`輪到 ${p.name}，請擲骰`;
+  startTimer();
+}
+function onRollClick(){if(!busy&&!rolledThisTurn)doRoll();}
+async function doRoll(forced){
+  if(rolledThisTurn||busy)return;
+  rolledThisTurn=true;busy=true;$('btnRoll').disabled=true;$('btnRoll').style.opacity='.4';
+  stopTimer();closePanels();
+  const p=curPlayer();
+  let steps=forced||rnd(1,6);
+  if(hasDeity(p,'bad')&&!p.deity.big&&Math.random()<0.5){steps=1;log(`💀 <b>${p.name}</b> 被衰神干擾，骰子失靈只走 1 步！`,DEITIES.bad.color);}
+  await animateDie(steps);
+  $('centerMsg').textContent=`${p.name} 擲出 ${steps} 點`;
+  await walk(p,steps);
+  await resolveNode(p);
+  await endTurn();
+}
+
+async function chooseFork(p,opts){
+  const buttons=opts.map((id,k)=>{const n=nodeById(id);return {label:`${tileIcon(n)} ${n.name}`,value:id,cls:'btn-gold',def:k===0};});
+  return await showChoice('🔀 岔路選擇',`前方有岔路，<b>${p.name}</b> 要往哪個方向？`,buttons);
+}
+async function walk(p,steps){
+  let from=p.from;
+  for(let s=0;s<steps;s++){
+    let opts=(MAP.adj[p.node]||[]).filter(n=>n!==from);
+    if(opts.length===0)opts=MAP.adj[p.node];
+    let nextId;
+    if(opts.length===1)nextId=opts[0];
+    else if(state.auto)nextId=pick(opts);
+    else nextId=await chooseFork(p,opts);
+    from=p.node;p.node=nextId;
+    if(nextId===0){const pay=inf(SALARY_BASE);p.cash+=pay;log(`🚩 <b>${p.name}</b> 經過起點，領薪水 $${fmt(pay)}。`,'#34d399');}
+    if(state.barricades[nextId]&&s<steps-1){delete state.barricades[nextId];log(`🚧 <b>${p.name}</b> 撞上路障，停在 ${nodeById(nextId).name}！`,'#f59e0b');updateMap();break;}
+    if(!state.auto){updateMap();recenter();await sleep(140);}
+  }
+  p.from=from;
+  if(hasDeity(p,'fortune')&&p.deity.big){p.cash+=200*steps;log(`💰 財神顯靈，<b>${p.name}</b> 走路撿到 $${fmt(200*steps)}。`,DEITIES.fortune.color);}
+  renderAll();
+}
+
+/* =========================================================
+   格子事件
+========================================================= */
+async function resolveNode(p){
+  const n=nodeById(p.node);
+  switch(n.type){
+    case 'property':await onProperty(p,n);break;
+    case 'fate':await onFate(p);break;
+    case 'news':await onNews();break;
+    case 'shop':await openShopBuy(p);break;
+    case 'stock':await alertModal('證券交易所',`歡迎來到 <b>${n.name}</b>。擲骰前可隨時開啟股市買賣或質押。`);break;
+    case 'bank':await onBank(p);break;
+    case 'jail':p.skip=true;log(`⛓ <b>${p.name}</b> 進入監獄，下回合暫停。`,'#f87171');await alertModal('監獄/休息','你被關進監獄，下一回合將暫停一次。');break;
+    case 'plaza':await alertModal('🔀 轉運廣場',`<b>${n.name}</b>：這裡是岔路口，移動時可選擇不同路徑。`);break;
+  }
+  renderAll();
+}
+function buyCost(p,base){let c=inf(base);if(hasDeity(p,'fortune'))c=p.deity.big?0:Math.round(c*0.8);return c;}
+// 路段壟斷：回傳擁有整段的玩家 id，否則 null
+function groupOwner(g){
+  if(g==null)return null;const props=MAP.nodes.filter(n=>n.type==='property'&&n.group===g);
+  const o=props[0].owner;if(o===null)return null;
+  return props.every(n=>n.owner===o)?o:null;
+}
+function isMonopoly(n){return n.type==='property'&&n.group!=null&&groupOwner(n.group)===n.owner&&n.owner!==null;}
+function rentDue(payer,owner,n){
+  let r=inf(n.baseRent)*HOUSE_MULT[n.level];
+  if(isMonopoly(n))r*=2;                          // 整段路被同一人買下 → 租金加倍
+  if(owner.tsunamiTurns>0)r*=0.5;
+  if(hasDeity(payer,'land'))r=payer.deity.big?0:r*0.5;
+  if(hasDeity(payer,'poor'))r*=1.5;
+  return Math.round(r);
+}
+async function onProperty(p,n){
+  if(n.owner!==null&&n.owner!==p.id&&hasDeity(p,'land')&&p.deity.big){
+    const old=state.players[n.owner];n.owner=p.id;
+    log(`⛩️ 土地公顯靈！<b>${p.name}</b> 強制接收 ${old.name} 的「${n.name}」。`,DEITIES.land.color);
+    await alertModal('土地公神蹟',`土地公強制 <b>${old.name}</b> 將「${n.name}」免費過戶給你！`);return;}
+  if(n.owner===null){
+    if(hasDeity(p,'poor')&&p.deity.big){await alertModal('無法購買',`<b>${p.name}</b> 被窮神（大）附身，禁止購買土地。`);return;}
+    const cost=buyCost(p,n.basePrice);
+    const grpInfo=`<br><span style="color:${n.groupColor};font-weight:700">路段：${n.groupName}</span>（買下整段租金加倍）`;
+    if(p.cash<cost){await alertModal('資金不足',`購買「${n.name}」需 $${fmt(cost)}，現金不足。`);return;}
+    const ans=await showChoice('購買土地',`「<b>${n.name}</b>」無主。<br>價格 <span class="mono" style="color:var(--gold)">$${fmt(cost)}</span>${hasDeity(p,'fortune')?'<br><span style="color:#fbbf24">（財神折扣已套用）</span>':''}${grpInfo}<br>你的現金 $${fmt(p.cash)}`,
+      [{label:'購買',value:true,cls:'btn-gold'},{label:'不買',value:false,cls:'btn-ghost'}]);
+    if(ans){p.cash-=cost;n.owner=p.id;log(`🏙 <b>${p.name}</b> 買下「${n.name}」花 $${fmt(cost)}。`,p.color);
+      if(isMonopoly(n)){log(`👑 <b>${p.name}</b> 壟斷「${n.groupName}」整段路，該段租金加倍！`,n.groupColor);
+        await alertModal('👑 路段壟斷',`你買下了「<b>${n.groupName}</b>」的所有土地！<br>該路段所有租金 <b>加倍</b>。`);}}
+  }else if(n.owner===p.id){await alertModal('自家土地',`這是你的「${n.name}」（${HOUSE_LABEL[n.level]}）${isMonopoly(n)?'<br>👑 此路段已壟斷，租金加倍中。':''}。可在「蓋房」面板升級。`);}
+  else{
+    const owner=state.players[n.owner];const rent=rentDue(p,owner,n);
+    if(rent<=0){log(`🛡 <b>${p.name}</b> 踩到 ${owner.name} 的「${n.name}」但免租。`,p.color);await alertModal('免付租金',`你被神明庇佑，「${n.name}」租金全免！`);return;}
+    p.cash-=rent;owner.cash+=rent;
+    log(`💸 <b>${p.name}</b> 付給 ${owner.name} 租金 $${fmt(rent)}（${n.name}${isMonopoly(n)?' 👑壟斷加倍':''}）。`,'#f87171');
+    await alertModal('支付租金',`「<b>${n.name}</b>」由 ${owner.name} 持有（${HOUSE_LABEL[n.level]}）${isMonopoly(n)?' <span style="color:'+n.groupColor+'">👑壟斷加倍</span>':''}。<br>支付租金 <span class="mono" style="color:var(--red)">$${fmt(rent)}</span>。`);
+    if(p.cash<0)await settleNegative(p);
+  }
+}
+async function onFate(p){
+  const harmful=p.deity&&p.deity.type==='happy'&&p.deity.big;
+  // 類股事件：對某分類全面拉抬或下殺（受漲跌停限制）
+  const catEvents=[
+    {cat:'ai',pct:0.12,emoji:'🤖',title:'AI 浪潮席捲市場'},
+    {cat:'semi',pct:0.11,emoji:'🔬',title:'晶片大廠擴產'},
+    {cat:'tech',pct:0.10,emoji:'💻',title:'科技財報亮眼'},
+    {cat:'energy',pct:0.12,emoji:'🛢️',title:'油價飆漲'},
+    {cat:'bio',pct:0.12,emoji:'💊',title:'新藥通過審查'},
+    {cat:'ship',pct:0.11,emoji:'🚢',title:'運價大漲'},
+    {cat:'consume',pct:0.09,emoji:'🛍️',title:'消費旺季報喜'},
+    {cat:'material',pct:0.10,emoji:'⛏️',title:'原物料行情噴發'},
+    {cat:'game',pct:0.10,emoji:'🎮',title:'娛樂股題材發酵'},
+    {cat:'fin',pct:0.08,emoji:'🏦',title:'金融升息受惠'},
+    {cat:'semi',pct:-0.11,emoji:'🚫',title:'晶片禁令衝擊'},
+    {cat:'tech',pct:-0.10,emoji:'📉',title:'科技泡沫疑慮'},
+    {cat:'bio',pct:-0.12,emoji:'⚠️',title:'臨床試驗失敗'},
+    {cat:'energy',pct:-0.11,emoji:'🔻',title:'油價崩跌'},
+    {cat:'ship',pct:-0.10,emoji:'⚓',title:'塞港解除運價回落'},
+    {cat:'reit',pct:-0.09,emoji:'🏚️',title:'不動產降溫'},
+    {cat:'ai',pct:-0.10,emoji:'🧊',title:'AI 估值修正'},
+  ];
+  const pool=[
+    {t:'good',msg:'中了樂透！',v:()=>{const g=inf(1800);p.cash+=g;return`獲得 $${fmt(g)}`;}},
+    {t:'good',msg:'路上撿到皮夾。',v:()=>{const g=inf(700);p.cash+=g;return`獲得 $${fmt(g)}`;}},
+    {t:'good',msg:'政府退稅。',v:()=>{const g=inf(1000);p.cash+=g;return`獲得 $${fmt(g)}`;}},
+    {t:'good',msg:'神秘禮物。',v:()=>{const it=pick(Object.keys(ITEMS));p.items.push(it);return`獲得道具：${ITEMS[it].icon}${ITEMS[it].name}`;}},
+    {t:'bad',msg:'繳納所得稅。',v:()=>{const g=inf(900);p.cash-=g;return`損失 $${fmt(g)}`;}},
+    {t:'bad',msg:'突發醫療費。',v:()=>{const g=inf(800);p.cash-=g;return`損失 $${fmt(g)}`;}},
+    {t:'bad',msg:'物價飆升，通膨加速！',v:()=>{triggerInflation('命運：物價飆升');return`全域通膨提前觸發`;}},
+  ];
+  // 半數機率抽到類股事件
+  let card;
+  if(Math.random()<0.5){const ev=pick(catEvents);const cc=STOCK_CATS[ev.cat];
+    card={t:ev.pct>=0?'good':'bad',msg:`${ev.emoji} ${ev.title}`,
+      v:()=>{const hit=applyCatEvent(ev.cat,ev.pct);return `${cc.label}類股全面${ev.pct>=0?'上漲':'下跌'} ${Math.abs(ev.pct*100)|0}%${hit?`（${hit} 檔${ev.pct>=0?'漲停':'跌停'}）`:''}`;}};
+  }else card=pick(pool);
+  if(harmful&&card.t==='bad'){card=pool.find(c=>c.t==='good');log(`🎎 福神（大）庇佑，<b>${p.name}</b> 免疫有害命運。`,DEITIES.happy.color);}
+  const res=card.v();log(`🃏 <b>${p.name}</b> 命運：${card.msg} ${res}`,'#a78bfa');
+  await alertModal('🃏 命運',`<b>${card.msg}</b><br>${res}`);
+  if(p.cash<0)await settleNegative(p);
+}
+async function onNews(){
+  const r=rnd(0,4);
+  if(r===0){state.rateHikeTurns=3;log(`📰 央行升息！利率加倍、建築 +30%（3 輪）。`,'#f59e0b');
+    await alertModal('📰 央行升息','央行升息：<br>· 存款利率<b>加倍</b><br>· 房屋建築成本<b>+30%</b><br>持續 3 輪。');}
+  else if(r===1){state.players.forEach(p=>{if(p.alive)p.cash+=inf(1200);});state.inflationMult*=1.1;
+    log(`📰 量化寬鬆(QE)！全員 +$${fmt(inf(1200))}，通膨永久 +10%。`,'#34d399');
+    await alertModal('📰 量化寬鬆 (QE)',`央行撒幣，全員獲得 <span class="mono" style="color:var(--green)">$${fmt(inf(1200))}</span>。<br>通膨倍率永久 <b>+10%</b>。`);}
+  else if(r===2){let c=0;MAP.nodes.forEach(n=>{if(n.type==='property'&&n.level>0){n.level--;c++;}});
+    log(`📰 房市泡沫破裂！所有建築降 1 級（共 ${c} 處）。`,'#f87171');
+    await alertModal('📰 房市泡沫','房地產泡沫破裂！<br>場上所有建築 <b>降低一級</b>。');}
+  else if(r===3){ // 全市場股災
+    let hit=0;state.stocks.forEach(s=>{const h=moveStock(s,1-STOCK_LIMIT);if(h)hit++;s.hist[s.hist.length-1]=s.price;});
+    if($('stockPanel').style.display==='flex')renderStock();
+    log(`📰 黑天鵝！全球股災，全市場跌停（${hit} 檔）。`,'#ff5d5d');
+    await alertModal('📰 黑天鵝股災','市場恐慌性拋售，<b>全市場股票跌停</b>！持有部位的玩家請注意斷頭風險。');}
+  else{ // 全市場大多頭
+    let hit=0;state.stocks.forEach(s=>{const h=moveStock(s,1+STOCK_LIMIT);if(h)hit++;s.hist[s.hist.length-1]=s.price;});
+    if($('stockPanel').style.display==='flex')renderStock();
+    log(`📰 資金狂潮！全市場大漲攻漲停（${hit} 檔）。`,'#34d399');
+    await alertModal('📰 資金狂潮','熱錢湧入，<b>全市場股票攻上漲停</b>！持股的玩家荷包滿滿。');}
+  renderAll();
+}
+async function onBank(p){
+  const rate=state.rateHikeTurns>0?0.2:0.1;const interest=Math.round(p.savings*rate);p.savings+=interest;
+  log(`🏦 <b>${p.name}</b> 銀行結息 +$${fmt(interest)}（利率 ${(rate*100)|0}%）。`,'#f5c451');
+  const ans=await showChoice('🏦 中央銀行',
+    `存款結息 <span class="mono" style="color:var(--green)">+$${fmt(interest)}</span>（利率 ${(rate*100)|0}%）<br>存款 $${fmt(p.savings)}　現金 $${fmt(p.cash)}`,
+    [{label:'存入 5000',value:'dep',cls:'btn-green'},{label:'提領 5000',value:'wd',cls:'btn-gold'},{label:'不操作',value:false,cls:'btn-ghost'}]);
+  if(ans==='dep'){const a=Math.min(5000,p.cash);p.cash-=a;p.savings+=a;}
+  else if(ans==='wd'){const a=Math.min(5000,p.savings);p.savings-=a;p.cash+=a;}
+}
+
+/* =========================================================
+   結束回合 / 通膨
+========================================================= */
+async function endTurn(){
+  stopTimer();busy=false;maybeSpawnDeity(curPlayer());
+  if(alivePlayers().length<=1)return gameOver();
+  let next=state.current;do{next=(next+1)%state.players.length;}while(!state.players[next].alive);
+  if(next<=state.current){state.round++;await onRoundEnd();if(alivePlayers().length<=1)return gameOver();}
+  state.current=next;renderAll();beginTurn();
+}
+function manualEnd(){if(rolledThisTurn&&!busy)endTurn();}
+async function onRoundEnd(){
+  fluctuateStocks();
+  if(state.rateHikeTurns>0)state.rateHikeTurns--;
+  if(state.freezeTurns>0){state.freezeTurns--;log(`❄️ 通膨凍結中（剩 ${state.freezeTurns} 輪）。`,'#60a5fa');}
+  else if(state.round%config.infTurn===0){triggerInflation('週期性通膨');}
+  renderAll();
+}
+function triggerInflation(reason){
+  state.inflationMult*=(1+config.infRate/100);state.inflationCount++;
+  log(`🔥 通膨爆發（${reason}）！物價 ×${(1+config.infRate/100).toFixed(2)}，總倍率 ×${state.inflationMult.toFixed(2)}。`,'#ff5d5d');
+  showInflationAlert();renderAll();
+}
+function showInflationAlert(){
+  $('inflationAlertSub').textContent=`物價總倍率 ×${state.inflationMult.toFixed(2)}　(+${config.infRate}%)`;
+  const a=$('inflationAlert');a.style.display='flex';a.classList.remove('inflation-flash');void a.offsetWidth;a.classList.add('inflation-flash');
+  setTimeout(()=>a.style.display='none',1800);
+}
+
+/* =========================================================
+   神明
+========================================================= */
+function maybeSpawnDeity(p){if(p.alive&&!p.deity&&Math.random()<0.18)assignDeity(p);}
+function assignDeity(p,forceType){
+  const type=forceType||pick(Object.keys(DEITIES));const big=Math.random()<0.3;
+  p.deity={type,big,turns:5};const d=DEITIES[type];
+  log(`${d.icon} <b>${p.name}</b> 被${d.name}${big?'（大）':'（小）'}附身，持續 5 回合！`,d.color);
+  if(type==='happy'&&big)p.items.push(pick(Object.keys(ITEMS)),pick(Object.keys(ITEMS)));
+  renderAll();
+}
+
+/* =========================================================
+   股票（20檔 + 走勢圖）
+========================================================= */
+function stockPrice(tk){return state.stocks.find(s=>s.ticker===tk).price;}
+function pctChange(s){return s.prev?((s.price-s.prev)/s.prev*100):0;}
+// 將股票價格依倍率移動，並夾在「前收 ref ±漲跌停」之內；回傳是否觸及漲/跌停(1/-1/0)
+function moveStock(s,factor){
+  const hi=Math.round(s.ref*(1+STOCK_LIMIT)),lo=Math.max(1,Math.round(s.ref*(1-STOCK_LIMIT)));
+  let np=Math.round(s.price*factor);
+  if(np>hi){np=hi;s.limit=1;}else if(np<lo){np=lo;s.limit=-1;}
+  s.price=Math.max(1,np);
+  return s.limit;
+}
+function fluctuateStocks(){
+  // 新的一個交易日：鎖定前收 ref，計算當日隨機漲跌（夾在漲跌停內）
+  state.stocks.forEach(s=>{
+    s.ref=s.price;s.prev=s.price;s.limit=0;
+    moveStock(s,1+(Math.random()*0.24-0.12)); // 日內 -12%~+12%，會被夾到 ±10%
+    s.hist.push(s.price);if(s.hist.length>40)s.hist.shift();
+  });
+  // 衰神(大)：持有者的股票強制下殺（仍受跌停限制）
+  state.players.forEach(p=>{if(hasDeity(p,'bad')&&p.deity.big)Object.keys(p.stocks).forEach(tk=>{const s=state.stocks.find(x=>x.ticker===tk);if(s){moveStock(s,0.85);s.hist[s.hist.length-1]=s.price;}});});
+}
+// 類股事件：對某分類所有股票套用漲跌（pct 例如 +0.12 或 -0.12，會被夾到漲跌停）
+function applyCatEvent(cat,pct){
+  let hit=0;
+  state.stocks.filter(s=>s.cat===cat).forEach(s=>{const r=moveStock(s,1+pct);if(r)hit++;s.hist[s.hist.length-1]=s.price;});
+  if($('stockPanel').style.display==='flex')renderStock();
+  return hit;
+}
+function sparkPath(hist,w,h){
+  const d=hist.slice(-14);const mn=Math.min(...d),mx=Math.max(...d),rg=(mx-mn)||1,n=d.length;
+  return d.map((v,i)=>{const x=(n===1?0:i/(n-1)*w);const y=h-((v-mn)/rg)*h;return(i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1);}).join(' ');
+}
+function bigChart(s){
+  const w=860,h=190,pad=34;const d=s.hist.slice(-40);
+  const mn=Math.min(...d),mx=Math.max(...d),rg=(mx-mn)||1,n=d.length;
+  const X=i=>pad+(n===1?0:i/(n-1)*(w-2*pad));const Y=v=>pad+(1-(v-mn)/rg)*(h-2*pad);
+  const line=d.map((v,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1)).join(' ');
+  const area=`M${X(0)} ${h-pad} `+d.map((v,i)=>'L'+X(i).toFixed(1)+' '+Y(v).toFixed(1)).join(' ')+` L${X(n-1)} ${h-pad} Z`;
+  const up=s.price>=(d[0]||s.price);const col=up?'#34d399':'#f87171';
+  let grid='';for(let g=0;g<=4;g++){const yy=pad+g/4*(h-2*pad);const val=mx-g/4*rg;
+    grid+=`<line x1="${pad}" y1="${yy}" x2="${w-pad}" y2="${yy}" stroke="#26314a" stroke-width="1"/><text x="6" y="${yy+4}" fill="#8a98b3" font-size="11" font-family="JetBrains Mono">${fmt(val)}</text>`;}
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">
+    ${grid}
+    <path d="${area}" fill="${col}22"/>
+    <path d="${line}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linejoin="round"/>
+    <circle cx="${X(n-1)}" cy="${Y(d[n-1])}" r="4" fill="${col}"/>
+  </svg>`;
+}
+function openStock(){if(busy&&rolledThisTurn)return;renderStock();$('stockPanel').style.display='flex';}
+function closeStock(){$('stockPanel').style.display='none';}
+function selectStock(tk){state.selStock=tk;renderStock();}
+function selectCat(c){state.selCat=c;renderStock();}
+function limitTag(s){return s.limit===1?'<span style="color:#fca5a5;font-weight:800"> 漲停</span>':s.limit===-1?'<span style="color:#86efac;font-weight:800"> 跌停</span>':'';}
+function renderStock(){
+  const p=curPlayer();const sel=state.stocks.find(s=>s.ticker===state.selStock)||state.stocks[0];
+  const selUp=sel.price>=sel.prev;const selPct=pctChange(sel);
+  const cat=state.selCat||'all';
+  const shown=state.stocks.filter(s=>cat==='all'||s.cat===cat);
+  const rows=shown.map(s=>{
+    const diff=s.price-s.prev;const up=diff>=0;const own=p.stocks[s.ticker]||0;const pl=p.pledged[s.ticker];const pc=pctChange(s);const cc=STOCK_CATS[s.cat];
+    return `<div class="card" style="padding:6px 8px;background:${s.ticker===sel.ticker?'#1f2b44':'var(--panel2)'};cursor:pointer" onclick="selectStock('${s.ticker}')">
+      <div class="flex items-center justify-between">
+        <div><b>${s.ticker}</b> <span class="text-xs" style="color:var(--muted)">${s.name}</span>
+          <span class="deity-badge" style="background:${cc.color}22;color:${cc.color}">${cc.label}</span></div>
+        <svg width="64" height="22" style="overflow:visible"><path d="${sparkPath(s.hist,64,22)}" fill="none" stroke="${up?'#34d399':'#f87171'}" stroke-width="1.8"/></svg>
+      </div>
+      <div class="flex items-center justify-between mt-1">
+        <span class="mono" style="color:${up?'var(--green)':'var(--red)'}">$${fmt(s.price)} ${up?'▲':'▼'}${fmt(Math.abs(diff))} (${pc>=0?'+':''}${pc.toFixed(1)}%)${limitTag(s)}</span>
+        <span class="text-xs" style="color:var(--muted)">持${own}${pl?` 質${pl.shares}`:''}</span>
+      </div>
+      <div class="flex gap-1 mt-1">
+        <button class="btn btn-green px-2 py-1 text-xs flex-1" onclick="event.stopPropagation();stockBuy('${s.ticker}')">買</button>
+        <button class="btn btn-red px-2 py-1 text-xs flex-1" onclick="event.stopPropagation();stockSell('${s.ticker}')">賣</button>
+        <button class="btn btn-ghost px-2 py-1 text-xs flex-1" onclick="event.stopPropagation();stockPledge('${s.ticker}')">質押</button>
+        ${pl?`<button class="btn btn-gold px-2 py-1 text-xs flex-1" onclick="event.stopPropagation();stockRedeem('${s.ticker}')">贖回</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+  const catBtns=[['all','全部'],...Object.keys(STOCK_CATS).map(k=>[k,STOCK_CATS[k].label])].map(([k,lab])=>
+    `<button class="btn ${k===cat?'btn-gold':'btn-ghost'} px-2 py-1 text-xs" onclick="selectCat('${k}')">${lab}</button>`).join('');
+  $('stockBody').innerHTML=`
+    <div class="flex items-center justify-between mb-2">
+      <div class="display text-xl font-bold" style="color:var(--gold)">📈 證券交易所（${state.stocks.length} 檔 · 漲跌停 ±${(STOCK_LIMIT*100)|0}%）</div>
+      <div class="flex items-center gap-3"><span class="text-sm" style="color:var(--muted)">現金 <span class="mono" style="color:var(--gold)">$${fmt(p.cash)}</span></span>
+      <button class="btn btn-ghost px-3 py-1" onclick="closeStock()">關閉 ✕</button></div>
+    </div>
+    <div class="card mb-2" style="padding:10px;background:var(--panel2)">
+      <div class="flex items-center justify-between mb-1">
+        <div><span class="display font-bold text-lg">${sel.ticker}</span> <span style="color:var(--muted)">${sel.name}</span>
+          <span class="deity-badge" style="background:${STOCK_CATS[sel.cat].color}22;color:${STOCK_CATS[sel.cat].color}">${STOCK_CATS[sel.cat].label}</span></div>
+        <div class="mono text-lg" style="color:${selUp?'var(--green)':'var(--red)'}">$${fmt(sel.price)} ${selUp?'▲':'▼'}${fmt(Math.abs(sel.price-sel.prev))} (${selPct>=0?'+':''}${selPct.toFixed(1)}%)${limitTag(sel)}</div>
+      </div>
+      ${bigChart(sel)}
+    </div>
+    <div class="flex flex-wrap gap-1 mb-2">${catBtns}</div>
+    <div class="text-xs mb-2" style="color:var(--muted)">點擊任一股票查看走勢圖。每輪有 ±${(STOCK_LIMIT*100)|0}% 漲跌停；質押可借市值 60%；股價暴跌觸發斷頭。</div>
+    <div class="scroll grid grid-cols-2 md:grid-cols-3 gap-2" style="overflow:auto;flex:1;min-height:0;padding-right:4px">${rows}</div>`;
+}
+function tradeQty(){const n=parseInt(prompt('輸入股數：','10'));return(isNaN(n)||n<=0)?0:n;}
+function stockBuy(tk){const p=curPlayer();if(hasDeity(p,'poor')&&p.deity.big){alert('窮神（大）禁止買股票！');return;}
+  const q=tradeQty();if(!q)return;const cost=stockPrice(tk)*q;if(p.cash<cost){alert('現金不足');return;}
+  p.cash-=cost;p.stocks[tk]=(p.stocks[tk]||0)+q;log(`📈 <b>${p.name}</b> 買進 ${tk} ${q} 股，花 $${fmt(cost)}。`,'#34d399');renderStock();renderAll();}
+function stockSell(tk){const p=curPlayer();const own=p.stocks[tk]||0;if(!own){alert('沒有持股');return;}
+  const q=Math.min(own,tradeQty());if(!q)return;const g=stockPrice(tk)*q;p.cash+=g;p.stocks[tk]-=q;if(p.stocks[tk]<=0)delete p.stocks[tk];
+  log(`📈 <b>${p.name}</b> 賣出 ${tk} ${q} 股，得 $${fmt(g)}。`,'#f87171');renderStock();renderAll();}
+function stockPledge(tk){const p=curPlayer();const own=p.stocks[tk]||0;if(!own){alert('沒有可質押的持股');return;}
+  const q=Math.min(own,tradeQty());if(!q)return;const loan=Math.round(stockPrice(tk)*q*0.6);
+  p.cash+=loan;p.stocks[tk]-=q;if(p.stocks[tk]<=0)delete p.stocks[tk];
+  if(p.pledged[tk]){p.pledged[tk].shares+=q;p.pledged[tk].loan+=loan;}else p.pledged[tk]={shares:q,loan};
+  log(`🏦 <b>${p.name}</b> 質押 ${tk} ${q} 股，借得 $${fmt(loan)}。`,'#a78bfa');renderStock();renderAll();}
+function stockRedeem(tk){const p=curPlayer();const pl=p.pledged[tk];if(!pl)return;if(p.cash<pl.loan){alert(`贖回需還 $${fmt(pl.loan)}，現金不足`);return;}
+  p.cash-=pl.loan;p.stocks[tk]=(p.stocks[tk]||0)+pl.shares;log(`🏦 <b>${p.name}</b> 償還 $${fmt(pl.loan)} 贖回 ${tk} ${pl.shares} 股。`,'#a78bfa');delete p.pledged[tk];renderStock();renderAll();}
+async function checkMarginCall(p){
+  for(const tk of Object.keys(p.pledged)){const pl=p.pledged[tk];const val=stockPrice(tk)*pl.shares;
+    if(val<pl.loan*1.15){let sf=0;if(val<pl.loan){sf=pl.loan-val;p.cash-=sf;}
+      log(`⚠ <b>${p.name}</b> 的 ${tk} 質押遭<b>斷頭平倉</b>${sf>0?`，補繳 $${fmt(sf)}`:''}。`,'#ff5d5d');
+      await alertModal('⚠ 斷頭平倉',`你質押的 <b>${tk}</b> 因股價暴跌維持率不足遭強制平倉。${sf>0?`<br>補繳差額 <span class="mono" style="color:var(--red)">$${fmt(sf)}</span>。`:''}`);
+      delete p.pledged[tk];if(p.cash<0)await settleNegative(p);}}
+}
+
+/* =========================================================
+   道具
+========================================================= */
+function openItems(){if(busy&&rolledThisTurn)return;renderItems();$('itemPanel').style.display='flex';}
+function closeItems(){$('itemPanel').style.display='none';}
+function renderItems(){
+  const p=curPlayer();const c={};p.items.forEach(it=>c[it]=(c[it]||0)+1);
+  const list=Object.keys(c).map(it=>{const m=ITEMS[it];
+    return `<div class="card flex items-center justify-between" style="padding:10px;background:var(--panel2)">
+      <div><div class="font-bold">${m.icon} ${m.name} ×${c[it]}</div><div class="text-xs" style="color:var(--muted)">${m.desc}</div></div>
+      <button class="btn btn-gold px-4 py-2" onclick="useItem('${it}')">使用</button></div>`;}).join('')||'<div class="text-sm" style="color:var(--muted)">目前沒有道具。</div>';
+  $('itemBody').innerHTML=`<div class="flex items-center justify-between mb-3"><div class="display text-xl font-bold" style="color:var(--gold)">🎴 道具卡</div><button class="btn btn-ghost px-3 py-1" onclick="closeItems()">關閉 ✕</button></div><div class="space-y-2">${list}</div>`;
+}
+function removeItem(p,it){const i=p.items.indexOf(it);if(i>=0)p.items.splice(i,1);}
+async function useItem(it){
+  const p=curPlayer();if(!p.items.includes(it))return;
+  if(hasDeity(p,'bad')&&p.deity.big){alert('衰神（大）禁止使用任何道具卡！');return;}
+  switch(it){
+    case 'accel':removeItem(p,it);closeItems();triggerInflation('通膨加速卡');break;
+    case 'freeze':removeItem(p,it);state.freezeTurns=5;log(`❄️ ${p.name} 使用經濟凍結卡，未來 5 輪停止通膨。`,'#60a5fa');break;
+    case 'tsunami':{const others=state.players.filter(x=>x.alive&&x.id!==p.id);if(!others.length){alert('沒有對手');return;}closeItems();
+      const opts=others.map(o=>({label:o.name,value:o.id,cls:'btn-red'}));opts.push({label:'取消',value:false,cls:'btn-ghost'});
+      const tgt=await showChoice('🌊 金融海嘯','選擇打擊對象（租金 -50%，持續 3 回合）：',opts);
+      if(tgt!==false){const o=state.players[tgt];o.tsunamiTurns=3;removeItem(p,it);log(`🌊 ${p.name} 對 ${o.name} 發動金融海嘯！`,'#60a5fa');}break;}
+    case 'dice':{if(rolledThisTurn){alert('本回合已擲骰');return;}closeItems();
+      const opts=[1,2,3,4,5,6].map(n=>({label:''+n,value:n,cls:'btn-gold'}));opts.push({label:'取消',value:false,cls:'btn-ghost'});
+      const n=await showChoice('🎯 遙控骰子','選擇前進步數：',opts);
+      if(n!==false){removeItem(p,it);log(`🎯 ${p.name} 使用遙控骰子，指定 ${n} 步。`,'#fbbf24');doRoll(n);return;}break;}
+    case 'barricade':{closeItems();const opts=[];let cur=p.node,from=p.from;
+      for(let k=1;k<=6;k++){let nx=(MAP.adj[cur]||[]).filter(x=>x!==from);let id=nx.length?nx[0]:MAP.adj[cur][0];opts.push({label:`+${k} ${nodeById(id).name}`,value:id,cls:'btn-ghost'});from=cur;cur=id;}
+      opts.push({label:'取消',value:false,cls:'btn-ghost'});
+      const idx=await showChoice('🚧 路障','選擇放置路障的格子（前方路徑）：',opts);
+      if(idx!==false){state.barricades[idx]=true;removeItem(p,it);log(`🚧 ${p.name} 在「${nodeById(idx).name}」放下路障。`,'#f59e0b');updateMap();}break;}
+    case 'summon':if(p.deity){alert('你身上已有神明');return;}removeItem(p,it);closeItems();assignDeity(p);break;
+    case 'dismiss':if(!p.deity){alert('你身上沒有神明');return;}removeItem(p,it);log(`🧧 ${p.name} 送走${DEITIES[p.deity.type].name}。`,'#f5c451');p.deity=null;break;
+  }
+  renderItems();renderAll();
+}
+async function openShopBuy(p){
+  const keys=Object.keys(ITEMS);
+  const opts=keys.map(it=>{const price=inf(ITEMS[it].price);let real=price;if(hasDeity(p,'fortune'))real=p.deity.big?0:Math.round(price*0.8);
+    return {label:`${ITEMS[it].icon}${ITEMS[it].name} $${fmt(real)}`,value:it,cls:'btn-ghost',price:real};});
+  opts.push({label:'不購買',value:false,cls:'btn-gold'});
+  const choice=await showChoice('🛒 道具商店',`選一張道具卡購買${hasDeity(p,'fortune')?'（財神折扣）':''}。<br>現金 $${fmt(p.cash)}`,opts);
+  if(choice!==false){const o=opts.find(x=>x.value===choice);if(p.cash<o.price){await alertModal('資金不足',`購買需 $${fmt(o.price)}。`);return;}
+    p.cash-=o.price;p.items.push(choice);log(`🛒 <b>${p.name}</b> 購買 ${ITEMS[choice].icon}${ITEMS[choice].name}（$${fmt(o.price)}）。`,'#22d3ee');
+    if(hasDeity(p,'happy')&&!p.deity.big){const b=pick(Object.keys(ITEMS));p.items.push(b);log(`🎎 福神加碼贈送 ${ITEMS[b].icon}${ITEMS[b].name}！`,DEITIES.happy.color);}}
+}
+
+/* =========================================================
+   蓋房
+========================================================= */
+function openBuild(){if(busy&&rolledThisTurn)return;renderBuild();$('buildPanel').style.display='flex';}
+function closeBuild(){$('buildPanel').style.display='none';}
+function upgradeCost(n){return Math.round(inf(n.basePrice)*0.6*construct());}
+function renderBuild(){
+  const p=curPlayer();const mine=MAP.nodes.filter(n=>n.type==='property'&&n.owner===p.id);
+  const rows=mine.map(n=>{const max=n.level>=4;const cost=upgradeCost(n);const mono=isMonopoly(n);
+    const rent=Math.round(inf(n.baseRent)*HOUSE_MULT[n.level]*(mono?2:1));
+    return `<div class="card flex items-center justify-between" style="padding:10px;background:var(--panel2)">
+      <div><div class="font-bold">🏙 ${n.name} <span class="ngrp" style="color:${n.groupColor}">▰${n.groupName}${mono?' 👑':''}</span></div>
+        <div class="text-xs" style="color:var(--muted)">${HOUSE_LABEL[n.level]}　租金 $${fmt(rent)}${mono?' <span style="color:'+n.groupColor+'">(壟斷加倍)</span>':''}</div></div>
+      ${max?'<span class="chip" style="color:var(--gold)">已滿級</span>':`<button class="btn btn-green px-3 py-2 text-sm" onclick="doUpgrade(${n.id})">升級 $${fmt(cost)}</button>`}
+    </div>`;}).join('')||'<div class="text-sm" style="color:var(--muted)">你還沒有土地。</div>';
+  $('buildBody').innerHTML=`<div class="flex items-center justify-between mb-3"><div class="display text-xl font-bold" style="color:var(--gold)">🏠 興建升級</div><button class="btn btn-ghost px-3 py-1" onclick="closeBuild()">關閉 ✕</button></div>
+    <div class="text-sm mb-2" style="color:var(--muted)">現金 <span class="mono" style="color:var(--gold)">$${fmt(p.cash)}</span>${state.rateHikeTurns>0?'　<span style="color:var(--red)">（升息中 +30%）</span>':''}</div>
+    <div class="space-y-2">${rows}</div>`;
+}
+function doUpgrade(id){const p=curPlayer();const n=nodeById(id);if(n.owner!==p.id||n.level>=4)return;const cost=upgradeCost(n);
+  if(p.cash<cost){alert('現金不足');return;}p.cash-=cost;n.level++;log(`🏠 <b>${p.name}</b> 將「${n.name}」升級為${HOUSE_LABEL[n.level]}（$${fmt(cost)}）。`,p.color);renderBuild();renderAll();}
+
+/* =========================================================
+   破產 / 清算
+========================================================= */
+async function settleNegative(p){
+  if(p.cash>=0)return;
+  log(`🔻 <b>${p.name}</b> 現金為負，啟動自動清算！`,'#ff5d5d');
+  if(p.cash<0&&p.savings>0){const u=Math.min(p.savings,-p.cash);p.savings-=u;p.cash+=u;}
+  for(const tk of Object.keys(p.stocks)){if(p.cash>=0)break;p.cash+=stockPrice(tk)*p.stocks[tk];delete p.stocks[tk];}
+  for(const tk of Object.keys(p.pledged)){if(p.cash>=0)break;const pl=p.pledged[tk];const v=stockPrice(tk)*pl.shares;if(v<pl.loan)p.cash-=(pl.loan-v);delete p.pledged[tk];}
+  const props=MAP.nodes.filter(n=>n.type==='property'&&n.owner===p.id);
+  for(const n of props){if(p.cash>=0)break;p.cash+=Math.round((inf(n.basePrice)+n.level*upgradeCost(n)*0.5)*0.7);n.owner=null;n.level=0;}
+  if(p.cash<0){p.alive=false;p.cash=0;MAP.nodes.forEach(n=>{if(n.type==='property'&&n.owner===p.id){n.owner=null;n.level=0;}});
+    log(`💥 <b>${p.name}</b> 宣告破產，退出遊戲！`,'#ff5d5d');await alertModal('💥 破產',`<b>${p.name}</b> 資不抵債，已宣告破產退出。`);}
+  else log(`♻ <b>${p.name}</b> 清算後勉強存活（現金 $${fmt(p.cash)}）。`,'#f5c451');
+  renderAll();
+}
+
+/* =========================================================
+   結束
+========================================================= */
+function gameOver(){
+  stopTimer();
+  const ranking=[...state.players].sort((a,b)=>netWorth(b)-netWorth(a));const winner=alivePlayers()[0]||ranking[0];
+  const rows=ranking.map((p,k)=>`<div class="flex items-center justify-between card" style="padding:8px;background:var(--panel2)">
+    <div class="flex items-center gap-2"><span class="display font-bold" style="color:var(--gold)">#${k+1}</span><span class="pawn" style="background:${p.color}">${p.id+1}</span><span>${p.name}</span>${p.alive?'':'<span class="chip" style="color:var(--red)">破產</span>'}</div>
+    <span class="mono" style="color:var(--gold)">$${fmt(netWorth(p))}</span></div>`).join('');
+  $('modalBox').innerHTML=`<div class="display text-2xl font-black mb-1" style="color:var(--gold)">🏆 遊戲結束</div>
+    <div class="text-sm mb-3">最終贏家：<b style="color:${winner.color}">${winner.name}</b></div>
+    <div class="space-y-2 mb-4">${rows}</div>
+    <button class="btn btn-gold w-full py-3" onclick="location.reload()">再玩一局 ↻</button>`;
+  $('modal').style.display='flex';modalResolver=null;
+}
+function closePanels(){closeStock();closeItems();closeBuild();closePlayers();}
+</script>
+</body>
+</html>

@@ -45,6 +45,40 @@
         <span class="text-xs text-[#8a98b3]">P2P 多人線上連線對戰版 · 免伺服器架構</span>
       </div>
 
+      <!-- 存檔讀取與連線修復 -->
+      <div class="border border-[#26314a] rounded-lg p-3 mb-4 bg-[#121826]">
+        <div class="text-xs text-[#f5c451] font-bold mb-2 flex items-center justify-between">
+          <span>💾 載入舊戰局 / 存檔管理</span>
+          <span class="text-[10px] text-[#8a98b3] font-normal">支援單機/線上對戰存檔</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <!-- 本地槽位讀取 -->
+          <div>
+            <label class="text-[11px] text-[#8a98b3] block mb-1">A. 從瀏覽器槽位讀取：</label>
+            <div class="flex gap-2">
+              <select id="loadSaveSlotSelect" class="seg text-xs py-1.5 flex-1">
+                <option value="1">本地快速存檔 1 (空)</option>
+                <option value="2">本地快速存檔 2 (空)</option>
+                <option value="3">本地快速存檔 3 (空)</option>
+              </select>
+              <button class="btn btn-gold px-3.5 py-1.5 text-xs shrink-0" onclick="loadGameFromLocalSlotBtn()">⚡ 載入</button>
+            </div>
+          </div>
+          <!-- 匯入存檔檔案 -->
+          <div>
+            <label class="text-[11px] text-[#8a98b3] block mb-1">B. 匯入存檔 JSON 檔案：</label>
+            <div class="flex gap-2">
+              <input type="file" id="importSaveFile" accept=".json" class="hidden" onchange="importGameFromJsonBtn(event)">
+              <button class="btn btn-ghost px-4 py-1.5 text-xs w-full text-center" onclick="$('importSaveFile').click()">📂 匯入 JSON 存檔</button>
+            </div>
+          </div>
+        </div>
+        <div id="reconnectNotifyBox" style="display: none;" class="mt-3 p-2.5 border border-[#34d399] rounded bg-[#10b981]/10 text-xs text-[#34d399] flex justify-between items-center">
+          <span>🔄 偵測到未結束的線上戰局 (房間代碼: <b id="reconnectRoomCode" class="mono text-white">--</b>)...</span>
+          <button class="btn btn-green px-3.5 py-1 text-xs shrink-0" onclick="autoReconnectBtn()">⚡ 連回戰局</button>
+        </div>
+      </div>
+
       <!-- 連線模式選擇 -->
       <label class="text-xs text-[#8a98b3] font-bold block mb-1">1. 選擇遊戲對戰模式</label>
       <div class="flex gap-3 mb-4 flex-wrap">
@@ -165,6 +199,18 @@
               <input id="gainEventPoints" type="number" min="0" value="15" class="seg mt-1 text-xs py-1.5">
             </div>
           </div>
+          
+          <div class="text-xs font-semibold text-[#8a98b3] mb-2 mt-4">C. 股票發行量限制</div>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex items-center gap-2">
+              <input id="cfgStockLimit" type="checkbox" class="w-4 h-4">
+              <label class="text-[10px] text-[#8a98b3]">啟用每檔股票發行量上限</label>
+            </div>
+            <div>
+              <label class="text-[10px] text-[#8a98b3]">每檔股票發行上限 (股)</label>
+              <input id="cfgStockShares" type="number" min="100" value="10000" class="seg mt-1 text-xs py-1.5">
+            </div>
+          </div>
         </div>
       </div>
 
@@ -213,6 +259,11 @@
       <div id="eventTicker" class="card mono" style="padding: 6px 16px; font-size: 13px; opacity: 0; transition: opacity .3s ease; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-color: var(--gold); box-shadow: 0 0 14px rgba(245,196,81,.25);"></div>
     </div>
 
+    <!-- 目前玩家踩到的地點提示 -->
+    <div class="absolute left-1/2 z-30" style="top: 102px; transform: translateX(-50%); pointer-events: none; max-width: 80vw;">
+      <div id="currentTileLabel" class="card" style="padding: 6px 18px; font-size: 14px; font-weight: 700; white-space: nowrap; border-color: #34d399; box-shadow: 0 0 14px rgba(52,211,153,.25); display: none;"></div>
+    </div>
+
     <!-- 左側玩家狀態面板 (常開但可最小化) -->
     <div id="leftSidebar" class="absolute left-3 top-[84px] z-30 card flex flex-col transition-all duration-300" style="width: 280px; max-height: calc(100vh - 240px); box-shadow: 0 4px 20px rgba(0,0,0,0.5); overflow: hidden;">
       <div class="flex items-center justify-between border-b border-[#26314a] p-3 bg-[#121826] shrink-0">
@@ -240,9 +291,10 @@
 
     <!-- 地圖控制按鈕 -->
     <div class="absolute z-30 flex flex-col gap-2" style="right: 14px; top: 84px;">
-      <button class="btn btn-gold mapbtn" title="回正（置中目前玩家）" onclick="recenter()">⌖</button>
-      <button class="btn btn-ghost mapbtn" title="放大" onclick="zoomBy(1.15)">＋</button>
-      <button class="btn btn-ghost mapbtn" title="縮小" onclick="zoomBy(0.87)">－</button>
+      <button class="btn btn-gold mapbtn" title="顯示全地圖" onclick="recenter(true)">⛶</button>
+      <button class="btn btn-gold mapbtn" title="放大並聚焦目前玩家" onclick="zoomToCurrentPlayer()">＋</button>
+      <button class="btn btn-ghost mapbtn" title="縮小" onclick="zoomBy(0.85)">－</button>
+      <button class="btn btn-ghost mapbtn" title="置中目前玩家" onclick="recenter()">⌖</button>
     </div>
 
     <!-- 中央骰子控制區 -->
@@ -266,6 +318,7 @@
         <button id="btnBuild" class="btn btn-ghost px-3.5 py-2 text-sm" onclick="openBuild()">🏠 蓋房升級</button>
         <button id="btnPlayers" class="btn btn-ghost px-3.5 py-2 text-sm" onclick="openPlayers()">👥 玩家狀態</button>
         <button id="btnLog" class="btn btn-ghost px-3.5 py-2 text-sm" onclick="openLog()">📜 事件紀錄</button>
+        <button id="btnSave" class="btn btn-ghost px-3.5 py-2 text-sm text-[#f5c451] border-[#f5c451]/30 hover:border-[#f5c451]" onclick="openSaveGameModal()">💾 儲存戰局</button>
         <button id="btnEnd" class="btn btn-ghost px-4 py-2 text-sm" onclick="manualEnd()" disabled style="opacity: 0.4;">⏭ 結束回合</button>
       </div>
     </div>
@@ -322,6 +375,15 @@
     </div>
   </div>
 
+  <!-- 賭場面板（行動者可操作；其他玩家為觀戰唯讀） -->
+  <div id="casinoPanel" class="overlay" style="display: none; z-index: 88;">
+    <div class="card pop" style="max-width: 560px; width: 100%; padding: 22px;">
+      <div id="casinoBody">
+        <!-- 動態渲染賭場 -->
+      </div>
+    </div>
+  </div>
+
   <!-- 事件紀錄面板 -->
   <div id="logPanel" class="overlay" style="display: none;">
     <div class="card pop" style="max-width: 600px; width: 100%; padding: 20px; max-height: 90vh; display: flex; flex-direction: column;">
@@ -335,7 +397,54 @@
     </div>
   </div>
 
+  <!-- 儲存檔案面板 -->
+  <div id="savePanel" class="overlay" style="display: none; z-index: 95;">
+    <div class="card pop scroll" style="max-width: 500px; width: 100%; padding: 20px; max-height: 90vh; overflow: auto;">
+      <div class="flex items-center justify-between mb-3 border-b border-[#26314a] pb-2">
+        <div class="display text-xl font-bold text-[#f5c451]">💾 儲存目前戰局</div>
+        <button class="btn btn-ghost px-3 py-1 text-xs" onclick="closeSaveGameModal()">關閉 ✕</button>
+      </div>
+      
+      <div class="text-xs text-[#8a98b3] mb-4 leading-relaxed">
+        您可以選擇將戰局儲存至瀏覽器的本地槽位，或下載 JSON 檔案備份至電腦中。
+      </div>
+      
+      <div class="space-y-3">
+        <!-- 槽位 1 -->
+        <div class="p-3 border border-[#26314a] rounded-lg bg-[#121826] flex items-center justify-between">
+          <div>
+            <div class="font-bold text-xs text-[#e6edf7]">本地存檔槽 1</div>
+            <div id="saveSlotInfo1" class="text-[10px] text-[#8a98b3] mt-1">無存檔資料</div>
+          </div>
+          <button class="btn btn-gold px-3.5 py-1.5 text-xs" onclick="saveGameToLocalSlot(1)">覆蓋儲存</button>
+        </div>
+        <!-- 槽位 2 -->
+        <div class="p-3 border border-[#26314a] rounded-lg bg-[#121826] flex items-center justify-between">
+          <div>
+            <div class="font-bold text-xs text-[#e6edf7]">本地存檔槽 2</div>
+            <div id="saveSlotInfo2" class="text-[10px] text-[#8a98b3] mt-1">無存檔資料</div>
+          </div>
+          <button class="btn btn-gold px-3.5 py-1.5 text-xs" onclick="saveGameToLocalSlot(2)">覆蓋儲存</button>
+        </div>
+        <!-- 槽位 3 -->
+        <div class="p-3 border border-[#26314a] rounded-lg bg-[#121826] flex items-center justify-between">
+          <div>
+            <div class="font-bold text-xs text-[#e6edf7]">本地存檔槽 3</div>
+            <div id="saveSlotInfo3" class="text-[10px] text-[#8a98b3] mt-1">無存檔資料</div>
+          </div>
+          <button class="btn btn-gold px-3.5 py-1.5 text-xs" onclick="saveGameToLocalSlot(3)">覆蓋儲存</button>
+        </div>
+      </div>
+      
+      <div class="border-t border-[#26314a] pt-4 mt-4">
+        <button class="btn btn-ghost py-2.5 w-full text-xs font-bold text-[#34d399] border-[#34d399]/30 hover:border-[#34d399]" onclick="exportGameToJson()">
+          📥 下載存檔為 JSON 備份檔案
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- 引入外部 JavaScript 邏輯 -->
-  <script src="app.js?v=3.0" defer></script>
+  <script src="app.js?v=3.3" defer></script>
 </body>
 </html>

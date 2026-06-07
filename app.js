@@ -8,12 +8,22 @@ const HOUSE_MULT = [1, 2, 3.5, 5.5, 8];
 const HOUSE_LABEL = ['空地', '一級', '二級', '三級', '地標'];
 
 const DEITIES = {
-  land: { name: '土地公', icon: '⛩️', color: '#a3e635' },
-  fortune: { name: '財神', icon: '💰', color: '#fbbf24' },
-  happy: { name: '福神', icon: '🎎', color: '#f472b6' },
-  poor: { name: '窮神', icon: '🪙', color: '#94a3b8' },
-  bad: { name: '衰神', icon: '💀', color: '#7c8597' },
+  land: { name: '土地公', icon: '⛩️', color: '#a3e635', good: true,
+    desc: '買地享 8 折（大土地公免費）；自己付過路費減半（大土地公免過路費）；大土地公踩到他人土地可直接奪取該地。' },
+  fortune: { name: '財神', icon: '💰', color: '#fbbf24', good: true,
+    desc: '買地享 8 折（大財神免費）；大財神每走一步額外獲得現金 $300/步。' },
+  happy: { name: '福神', icon: '🎎', color: '#f472b6', good: true,
+    desc: '蓋房升級費用減半（大福神免費）；大福神免疫命運卡的負面事件。' },
+  poor: { name: '窮神', icon: '🪙', color: '#94a3b8', good: false,
+    desc: '（負面）自己付的過路費 +50%；每回合移動會損失現金 $400（大窮神損失 $1500）。' },
+  bad: { name: '衰神', icon: '💀', color: '#7c8597', good: false,
+    desc: '（負面）有 50% 機率每回合只能前進 1 步（大衰神必定只能走 1 步）。' },
 };
+
+/* 取得神明效果說明文字 */
+function deityEffectText(type) {
+  return (DEITIES[type] && DEITIES[type].desc) || '';
+}
 
 const ITEMS = {
   accel: { name: '通膨加速卡', icon: '🔥', price: 100, desc: '立即觸發一次全域通膨循環。' },
@@ -23,8 +33,17 @@ const ITEMS = {
   barricade: { name: '路障', icon: '🚧', price: 50, desc: '在指定格子放置路障，他人經過即停下。' },
   summon: { name: '請神符', icon: '📜', price: 90, desc: '隨機召喚神明附身自己。' },
   dismiss: { name: '送神符', icon: '🧧', price: 60, desc: '送走自己身上的神明。' },
-  bazooka: { name: '火箭筒', icon: '🚀', price: 120, desc: '發射火箭筒直接重創另一名玩家，使其受傷送醫 2 回合。' },
+  bazooka: { name: '火箭筒', icon: '🚀', price: 120, desc: '發射火箭筒直接重創另一名玩家，使其受傷送醫 3 回合。' },
   demolish: { name: '拆除卡', icon: '🏚️', price: 100, desc: '拆除任一玩家的某一處土地或房屋（調降一級，空地則收回為無主地）。' },
+  redcard: { name: '紅卡', icon: '📈', price: 130, desc: '使指定的股票連續三天「漲停板」。' },
+  blackcard: { name: '黑卡', icon: '📉', price: 130, desc: '使指定的股票連續三天「跌停板」。' },
+  taxcard: { name: '查稅卡', icon: '💰', price: 100, desc: '強制從指定對手身上收取其現金 20% 的稅金。' },
+  pricehike: { name: '漲價卡', icon: '💹', price: 90, desc: '使指定路段的土地過路費加倍，持續五輪。' },
+  seal: { name: '查封卡', icon: '🔏', price: 80, desc: '使指定路段的土地停收過路費，持續五輪（可反制漲價卡）。' },
+  auction: { name: '拍賣卡', icon: '🔨', price: 150, desc: '強制拍賣對手的一塊土地，由出價最高者得標。' },
+  staycard: { name: '停留卡', icon: '⏸️', price: 60, desc: '指定自己或對手在原地停留一回合。' },
+  motorcycle: { name: '機車卡', icon: '🏍️', price: 70, desc: '使用後接下來 5 回合可擲兩顆骰子前進。' },
+  car: { name: '汽車卡', icon: '🏎️', price: 110, desc: '使用後接下來 5 回合可擲三顆骰子前進。' },
 };
 
 const PROP_NAMES = [
@@ -105,6 +124,15 @@ const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const rnd = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
 const pick = a => a[rnd(0, a.length - 1)];
+
+function shuffleArray(arr) {
+  const newArr = [...arr];
+  for (let i = newArr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+  }
+  return newArr;
+}
 
 function inf(a) {
   return Math.round(a * state.inflationMult);
@@ -500,7 +528,77 @@ function routeLabel(cur, id) {
 ========================================================= */
 function startGame() {
   if (playMode === 'online' && peerRole === 'guest') return; // 客戶端等房主指令
+
+  // 線上模式：房主開局前確認連線人數，並以實際連線玩家數為準
+  if (playMode === 'online' && peerRole === 'host') {
+    if (!peer || !peer.open) {
+      alertModal('尚未建立房間', '請先點擊「建立多人房間」取得房間代碼，並等待玩家連線加入後再開始。');
+      return;
+    }
+    if (isLoadedGame) {
+      // 載入存檔的線上遊戲：確保所有存檔中的玩家都已連回 (online)
+      const offlineCount = onlinePlayers.filter((p, k) => k > 0 && !p.online).length;
+      if (offlineCount > 0) {
+        alertModal('無法開始', `還有 ${offlineCount} 位存檔玩家尚未連回。請等待所有玩家綠燈連線。`);
+        return;
+      }
+    } else {
+      if (onlinePlayers.length < 2) {
+        alertModal('無法建立戰局', '線上對戰至少需要 2 位玩家連線加入後才能開始。請把房間代碼傳給朋友，等待他們加入。');
+        return;
+      }
+      selPlayers = onlinePlayers.length;
+    }
+  }
+
+  if (isLoadedGame) {
+    if (playMode === 'online' && peerRole === 'host') {
+      // 確保將最新的 peerId 與連線狀態寫入 state.players
+      for (let i = 1; i < state.players.length; i++) {
+        state.players[i].peerId = onlinePlayers[i].peerId;
+        state.players[i].online = true;
+      }
+      broadcastData({
+        type: 'GAME_START',
+        config,
+        state
+      });
+      // 寫入 Session 快取
+      localStorage.setItem('dc_monopoly_active_session', JSON.stringify({
+        roomCode: peer.id,
+        role: 'host',
+        playerIndex: 0,
+        name: state.players[0].name,
+        icon: state.players[0].icon
+      }));
+    } else if (playMode === 'local') {
+      clearActiveSession();
+    }
+    
+    // 隱藏設定，顯示遊戲
+    $('setupScreen').style.display = 'none';
+    $('game').style.display = 'block';
+    $('game').classList.remove('hidden');
+    
+    buildMapDOM();
+    renderAll();
+    recenter(true);
+    
+    log('🎮 戰局已恢復！遊戲已啟動，祝您遊戲愉快。', 'var(--gold)');
+    
+    isLoadedGame = false;
+
+    if (playMode === 'online') {
+      lastActiveTurnIndex = -1;
+      checkTurnTransition();
+    } else {
+      beginTurn();
+    }
+    return;
+  }
   
+  clearActiveSession();
+
   const itemCustom = {
     accel: Math.max(1, parseInt($('priceAccel').value) || 100),
     freeze: Math.max(1, parseInt($('priceFreeze').value) || 90),
@@ -523,7 +621,9 @@ function startGame() {
     save: Math.max(0, parseInt($('cfgSave').value) || 0),
     points: Math.max(0, parseInt($('cfgPoints').value) || 100),
     gainStart: Math.max(0, parseInt($('gainStartPoints').value) || 25),
-    gainEvent: Math.max(0, parseInt($('gainEventPoints').value) || 15)
+    gainEvent: Math.max(0, parseInt($('gainEventPoints').value) || 15),
+    stockLimit: $('cfgStockLimit') ? $('cfgStockLimit').checked : false,
+    stockShares: Math.max(100, parseInt($('cfgStockShares') ? $('cfgStockShares').value : '10000') || 10000)
   };
   
   buildMap();
@@ -553,24 +653,36 @@ function startGame() {
       deity: null,
       alive: true,
       tsunamiTurns: 0,
-      skip: false
+      skip: false,
+      skipTurns: 0,
+      diceCount: 1,
+      diceCountTurns: 0,
+      plazaChoice: null
     });
   }
   
+  const order = shuffleArray(players.map(p => p.id));
   state = {
     players,
-    current: 0,
+    turnOrder: order,
+    currentOrderIndex: 0,
+    current: order[0],
     round: 1,
     inflationMult: 1.0,
     inflationCount: 0,
     freezeTurns: 0,
     rateHikeTurns: 0,
     barricades: {},
+    stockOverrides: [],
+    priceHikes: [],
+    seals: [],
     selStock: STOCK_DEF[0][0],
     selCat: 'all',
     logHistory: [],
     turnActions: [],
     
+    casinoLive: null,
+
     mapDeity: null,
     mapDemon: null,
     deityCooldown: 0,
@@ -584,7 +696,9 @@ function startGame() {
       prev: s[3],
       ref: s[3],
       hist: [s[3]],
-      limit: 0
+      limit: 0,
+      totalShares: config.stockLimit ? config.stockShares : null,
+      availableShares: config.stockLimit ? config.stockShares : null
     }))
   };
   
@@ -598,6 +712,13 @@ function startGame() {
       config,
       state
     });
+    localStorage.setItem('dc_monopoly_active_session', JSON.stringify({
+      roomCode: peer.id,
+      role: 'host',
+      playerIndex: 0,
+      name: state.players[0].name,
+      icon: state.players[0].icon
+    }));
   }
   
   // 隱藏設定，顯示遊戲
@@ -610,7 +731,14 @@ function startGame() {
   recenter(true);
   
   log('🎮 戰局已建立！遊戲已啟動，祝您遊戲愉快。', 'var(--gold)');
-  beginTurn();
+
+  // 線上模式：依回合歸屬決定由哪一端開始行動，避免房主代替他人行動
+  if (playMode === 'online') {
+    lastActiveTurnIndex = -1;
+    checkTurnTransition();
+  } else {
+    beginTurn();
+  }
 }
 
 /* =========================================================
@@ -779,20 +907,45 @@ function updateMap() {
     if (box) {
       box.innerHTML = '';
       state.players.filter(p => p.alive && p.node === n.id).forEach(p => {
-        const d = document.createElement('div');
-        d.className = 'pawn';
-        d.style.borderColor = p.color;
-        d.textContent = p.icon; 
-        box.appendChild(d);
+        const isCur = p.id === curPlayer().id;
+        const wrap = document.createElement('div');
+        wrap.className = 'pawn-tag' + (isCur ? ' pawn-tag-cur' : '');
+        wrap.style.setProperty('--pcolor', p.color);
+        wrap.innerHTML = `<span class="pawn pawn-marker${isCur ? ' pawn-pulse' : ''}" style="border-color:${p.color}; box-shadow:0 0 0 3px ${p.color}, 0 2px 6px rgba(0,0,0,.55);">${p.icon}</span>` +
+          `<span class="pawn-name" style="background:${p.color};">${p.name}</span>`;
+        box.appendChild(wrap);
       });
     }
+    const playersOnNode = state.players.filter(pl => pl.alive && pl.node === n.id);
+    const hasCurPlayer = playersOnNode.some(pl => pl.id === curPlayer().id);
+    const hasOtherPlayers = playersOnNode.some(pl => pl.id !== curPlayer().id);
     
-    el.classList.toggle('hl', n.id === curPlayer().node);
+    el.classList.toggle('hl', hasCurPlayer);
+    el.classList.toggle('has-others', hasOtherPlayers && !hasCurPlayer);
   });
 }
 
 function applyView() {
   $('mapWorld').style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`;
+}
+
+/* 顯示目前行動玩家正踩在哪個地點 */
+function updateCurrentTileLabel(p) {
+  const el = $('currentTileLabel');
+  if (!el) return;
+  if (!p || !state) { el.style.display = 'none'; return; }
+  const n = nodeById(p.node);
+  if (!n) { el.style.display = 'none'; return; }
+  let ownerTxt = '';
+  if (n.type === 'property' && n.owner !== null) {
+    const owner = state.players[n.owner];
+    ownerTxt = owner.id === p.id ? '（自己的地）' : `（${owner.name} 的地）`;
+  }
+  el.innerHTML = `<span style="color:${p.color}">${p.icon} ${p.name}</span>` +
+    ` <span style="color:#8a98b3">正踩在</span> ` +
+    `<span style="color:#34d399">${tileIcon(n)} ${n.name}</span>` +
+    (ownerTxt ? ` <span style="color:#8a98b3;font-size:12px">${ownerTxt}</span>` : '');
+  el.style.display = 'block';
 }
 
 function recenter(initial) {
@@ -814,6 +967,58 @@ function recenter(initial) {
 function zoomBy(f) {
   view.zoom = Math.max(0.2, Math.min(2.0, view.zoom * f));
   applyView();
+}
+window.zoomBy = zoomBy;
+
+/* 將地圖平移置中到指定節點（可選同時設定縮放） */
+function centerOnNode(nodeId, zoom) {
+  const vp = $('mapViewport');
+  const w = vp.clientWidth, h = vp.clientHeight;
+  const n = nodeById(nodeId);
+  if (!n) return;
+  if (typeof zoom === 'number') {
+    view.zoom = Math.max(0.2, Math.min(2.0, zoom));
+  }
+  view.x = w / 2 - n.x * view.zoom;
+  view.y = h / 2 - n.y * view.zoom;
+  applyView();
+}
+
+/* 放大並聚焦到「目前行動玩家」的位置 */
+function zoomToCurrentPlayer() {
+  const target = Math.min(2.0, view.zoom * 1.3 < 0.9 ? 0.9 : view.zoom * 1.3);
+  centerOnNode(curPlayer().node, target);
+  flashFocusNode(curPlayer().node);
+}
+window.zoomToCurrentPlayer = zoomToCurrentPlayer;
+
+/* 點擊玩家狀態 → 跳轉並聚焦到該玩家所在位置 */
+function focusPlayer(pid) {
+  if (!state) return;
+  const p = state.players.find(x => x.id === pid);
+  if (!p) return;
+  const target = Math.max(view.zoom, 0.85);
+  centerOnNode(p.node, target);
+  flashFocusNode(p.node);
+}
+window.focusPlayer = focusPlayer;
+
+/* 從玩家狀態彈窗點擊：先關閉彈窗再聚焦，方便看到地圖 */
+function focusPlayerFromPanel(pid) {
+  closePlayers();
+  focusPlayer(pid);
+}
+window.focusPlayerFromPanel = focusPlayerFromPanel;
+
+/* 對焦節點時短暫高亮，方便辨識 */
+let _focusFlashTimer = null;
+function flashFocusNode(nodeId) {
+  const el = $('node' + nodeId);
+  if (!el) return;
+  document.querySelectorAll('.mnode.focus-flash').forEach(e => e.classList.remove('focus-flash'));
+  el.classList.add('focus-flash');
+  if (_focusFlashTimer) clearTimeout(_focusFlashTimer);
+  _focusFlashTimer = setTimeout(() => el.classList.remove('focus-flash'), 1600);
 }
 
 /* 重構平移拖曳地圖邏輯 (點擊卡片或背景均可流暢抓取) */
@@ -878,9 +1083,12 @@ function netWorth(p) {
 function deityBadge(p) {
   if (!p.deity) return '';
   const d = DEITIES[p.deity.type];
-  return `<span class="deity-badge" style="background:${d.color}22; color:${d.color}; border:1px solid ${d.color}55">
-    ${d.icon} ${d.name}${p.deity.big ? '★' : ''} ${p.deity.turns}T
-  </span>`;
+  return `<div class="w-full">
+    <span class="deity-badge" style="background:${d.color}22; color:${d.color}; border:1px solid ${d.color}55" title="${deityEffectText(p.deity.type)}">
+      ${d.icon} ${d.name}${p.deity.big ? '★' : ''} ${p.deity.turns}T
+    </span>
+    <div class="text-[10px] mt-1 leading-relaxed" style="color:${d.color}">📜 ${deityEffectText(p.deity.type)}</div>
+  </div>`;
 }
 
 function openPlayers() {
@@ -894,8 +1102,20 @@ function closePlayers() {
 }
 
 function renderPlayers() {
+  const sortedPlayers = state.players
+    .filter(pl => pl.alive)
+    .map(pl => ({ id: pl.id, worth: netWorth(pl) }))
+    .sort((a, b) => b.worth - a.worth);
+  
+  const rankMap = {};
+  sortedPlayers.forEach((item, index) => {
+    rankMap[item.id] = index + 1;
+  });
+
   const cards = state.players.map(p => {
     const active = p.id === state.current;
+    const rank = p.alive ? rankMap[p.id] : null;
+    const rankBadge = rank ? `<span class="chip border-[#f5c451] text-[#f5c451]">🏆 排名 #${rank}</span>` : '';
     const stocksTxt = Object.keys(p.stocks).filter(k => getStockQty(p, k) > 0).map(k => {
       const s = state.stocks.find(x => x.ticker === k);
       const name = s ? s.name : k;
@@ -907,14 +1127,23 @@ function renderPlayers() {
     }).join('<br>') || '—';
     const pledgeTxt = Object.keys(p.pledged).map(k => `${k}質${p.pledged[k].shares}`).join(' ') || '—';
     const props = MAP.nodes.filter(n => n.type === 'property' && n.owner === p.id).length;
-    return `<div class="card ${active ? 'glow' : ''} p-3 flex flex-col justify-between" style="${p.alive ? '' : 'opacity: 0.4'}">
+    const isOnline = playMode === 'local' || p.online !== false;
+    const onlineBadgeText = isOnline 
+      ? `<span class="chip text-[#34d399] border-[#34d399]">🟢 在線</span>` 
+      : `<span class="chip text-[#f87171] border-[#f87171]">🔴 離線託管</span>`;
+      
+    return `<div class="card ${active ? 'glow' : ''} p-3 flex flex-col justify-between" style="${p.alive ? '' : 'opacity: 0.4'}; cursor: pointer;" title="點擊跳轉到 ${p.name} 的位置" onclick="focusPlayerFromPanel(${p.id})">
       <div>
         <div class="flex items-center justify-between border-b border-[#26314a] pb-1.5 mb-2">
           <div class="flex items-center gap-2">
-            <span class="pawn font-bold text-sm" style="border-color:${p.color}">${p.icon}</span>
+            <span class="pawn font-bold text-sm ${isOnline ? '' : 'offline-grayscale'}" style="border-color:${p.color}">${p.icon}</span>
             <span class="font-bold text-[#e6edf7]">${p.name}</span>
           </div>
-          ${p.alive ? (active ? '<span class="chip text-[#34d399] border-[#34d399]">行動中</span>' : '') : '<span class="chip text-[#f87171] border-[#f87171]">破產</span>'}
+          <div class="flex items-center gap-1">
+            ${rankBadge}
+            ${playMode === 'online' ? onlineBadgeText : ''}
+            ${p.alive ? (active ? '<span class="chip text-[#34d399] border-[#34d399]">行動中</span>' : '') : '<span class="chip text-[#f87171] border-[#f87171]">破產</span>'}
+          </div>
         </div>
         <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs mb-2">
           <div class="text-[#8a98b3]">現金</div>
@@ -973,6 +1202,7 @@ function renderAll() {
   $('turnPawn').style.borderColor = p.color;
   $('turnPawn').textContent = p.icon;
   $('turnName').textContent = p.name;
+  updateCurrentTileLabel(p);
   
   // 多人對戰權限過濾：判斷目前是不是自己的回合。如果不是，禁用一切主動操作按鈕！
   if (playMode === 'online') {
@@ -998,6 +1228,7 @@ function renderAll() {
   
   renderLogs();
   renderSidebar();
+  updateCasinoView();
   if ($('playersPanel').style.display === 'flex') renderPlayers();
   if ($('stockPanel').style.display === 'flex') renderStock();
   if ($('buildPanel').style.display === 'flex') renderBuild();
@@ -1145,6 +1376,45 @@ async function beginTurn() {
   const p = curPlayer();
   if (!p.alive) return endTurn();
   
+  // 1. 離線玩家託管處理 (線上模式且我們是房主)
+  if (playMode === 'online' && peerRole === 'host' && p.online === false) {
+    busy = true;
+    rolledThisTurn = false;
+    state.auto = true;
+    
+    // 結算神明
+    if (p.deity) {
+      p.deity.turns--;
+      if (p.deity.turns <= 0) {
+        log(`${DEITIES[p.deity.type].icon} <b>${p.name}</b> 的${DEITIES[p.deity.type].name}效期結束，離開了。`, DEITIES[p.deity.type].color);
+        p.deity = null;
+      }
+    }
+    
+    // 結算金融海嘯
+    if (p.tsunamiTurns > 0) p.tsunamiTurns--;
+    
+    log(`🤖 [系統] 偵測到玩家 <b>${p.name}</b> 離線，已啟用自動託管。`, '#f87171');
+    $('centerMsg').innerHTML = `<span class="text-[#f87171] font-bold">🤖 [系統託管中] 玩家 ${p.name} 離線，自動行動中...</span>`;
+    
+    setTimeout(async () => {
+      rolledThisTurn = true;
+      let steps = rnd(1, 6);
+      if (hasDeity(p, 'bad') && !p.deity.big && Math.random() < 0.5) steps = 1;
+      else if (hasDeity(p, 'bad') && p.deity.big) steps = 1;
+      
+      await animateDie(steps);
+      state.turnActions.push(`🎲 (自動託管) 擲出 ${steps} 點`);
+      
+      await walk(p, steps);
+      await resolveNode(p);
+      
+      busy = false;
+      setTimeout(endTurn, 1500);
+    }, 1500);
+    return;
+  }
+  
   if (p.skipTurns && p.skipTurns > 0) {
     p.skipTurns--;
     $('centerMsg').textContent = `${p.name} 本回合暫停中`;
@@ -1156,7 +1426,7 @@ async function beginTurn() {
   if (state.turnActions && state.turnActions.length > 0 && lastActiveTurnIndex !== -1) {
     const prevP = state.players[lastActiveTurnIndex];
     if (prevP) {
-      showTurnBriefingModal(prevP, state.turnActions);
+      showTurnBriefingModal(prevP, state.turnActions, p);
     }
   }
   
@@ -1260,7 +1530,14 @@ async function doRoll(forced) {
   closePanels();
   
   const p = curPlayer();
-  let steps = forced || rnd(1, 6);
+  let steps;
+  if (forced) {
+    steps = forced;
+  } else {
+    const dc = p.diceCount || 1;
+    steps = 0;
+    for (let d = 0; d < dc; d++) steps += rnd(1, 6);
+  }
   
   if (hasDeity(p, 'bad') && !p.deity.big && Math.random() < 0.5) {
     steps = 1;
@@ -1271,7 +1548,8 @@ async function doRoll(forced) {
   }
   
   await animateDie(steps);
-  $('centerMsg').textContent = `${p.name} 擲出了 ${steps} 點`;
+  const dc = p.diceCount || 1;
+  $('centerMsg').textContent = `${p.name} ${dc > 1 ? '(' + dc + '顆骰子) ' : ''}擲出了 ${steps} 點`;
   state.turnActions.push(`🎲 擲出 ${steps} 點，移動至「${nodeById(p.node).name}」`);
   
   await walk(p, steps);
@@ -1295,13 +1573,14 @@ async function doRoll(forced) {
 async function walk(p, steps) {
   const isActing = (playMode === 'local' || (peer && p.peerId === peer.id));
   let from = p.from;
+  // 轉運站方向：僅在「剛好停在轉運站」時設定的方向，影響起步的第一步
+  const startChoice = p.plazaChoice;
+  p.plazaChoice = null;
   for (let s = 0; s < steps; s++) {
     let nextId;
-    const fwd = neighborsForward(p.node, from);
-    // 走到任何有多條前進路線的節點（轉運廣場/賭場）時，由行動玩家即時選擇方向
-    if (fwd.length > 1 && isActing && !state.auto) {
-      const chosen = await chooseDirectionAtFork(p, p.node, fwd);
-      nextId = (chosen !== undefined) ? chosen : getNextNode(p.node, from);
+    // 途中經過岔路一律走預設主幹道（不再彈出選擇）；唯有上一回合停在轉運站所選方向，才在第一步生效
+    if (s === 0 && startChoice != null && (MAP.adj[p.node] || []).includes(startChoice)) {
+      nextId = startChoice;
     } else {
       nextId = getNextNode(p.node, from);
     }
@@ -1354,7 +1633,7 @@ async function resolveNode(p) {
     state.deityCooldown = 3; 
     log(`✨ <b>${p.name}</b> 踩點獲得地圖上的【${DEITIES[type].name}${big ? '(大)' : ''}】附身！`, DEITIES[type].color);
     if (playMode === 'local' || (peer && p.peerId === peer.id)) {
-      await alertModal('✨ 獲得神明附身', `您踩中了神明靈光！【<b>${DEITIES[type].name}${big ? ' (大天神)' : ''}</b>】已降臨附身！`);
+      await alertModal('✨ 獲得神明附身', `您踩中了神明靈光！【<b>${DEITIES[type].name}${big ? ' (大天神)' : ''}</b>】已降臨附身！<div class="mt-2 p-2 rounded border text-xs leading-relaxed" style="border-color:${DEITIES[type].color}55; background:${DEITIES[type].color}15; color:${DEITIES[type].color}">📜 神明功能：${deityEffectText(type)}（效期 5 回合）</div>`);
     }
   }
   
@@ -1366,7 +1645,7 @@ async function resolveNode(p) {
     state.demonCooldown = 3; 
     log(`💀 <b>${p.name}</b> 踩點遭遇地圖上的【${DEITIES[type].name}${big ? '(大)' : ''}】降臨糾纏！`, DEITIES[type].color);
     if (playMode === 'local' || (peer && p.peerId === peer.id)) {
-      await alertModal('💀 遭惡魔附身', `不幸！您踩中了邪魔黑氣！【<b>${DEITIES[type].name}${big ? ' (大惡魔)' : ''}</b>】已糾纏上身！`);
+      await alertModal('💀 遭惡魔附身', `不幸！您踩中了邪魔黑氣！【<b>${DEITIES[type].name}${big ? ' (大惡魔)' : ''}</b>】已糾纏上身！<div class="mt-2 p-2 rounded border text-xs leading-relaxed" style="border-color:${DEITIES[type].color}55; background:${DEITIES[type].color}15; color:${DEITIES[type].color}">📜 影響：${deityEffectText(type)}（效期 5 回合）</div>`);
     }
   }
 
@@ -1412,7 +1691,18 @@ async function resolveNode(p) {
       break;
     case 'plaza':
       if (playMode === 'local' || (peer && p.peerId === peer.id)) {
-        await alertModal('🔀 轉運廣場', `<b>${n.name}</b>：下一回合開始擲骰前，您可以設定行進路線面向。`);
+        const fwd = neighborsForward(p.node, p.from);
+        if (fwd.length > 1) {
+          const chosen = await chooseDirectionAtFork(p, p.node, fwd);
+          if (chosen != null) {
+            p.plazaChoice = chosen;
+            log(`🧭 <b>${p.name}</b> 在轉運站選定了下一回合的前進方向：<b>${nodeById(chosen).name}</b>。`, p.color);
+            state.turnActions.push(`🧭 在轉運站選擇下一步前往「${nodeById(chosen).name}」`);
+            await alertModal('🔀 轉運站', `已設定！下一回合擲骰後，您將朝<b>「${nodeById(chosen).name}」</b>方向出發。`);
+          }
+        } else {
+          await alertModal('🔀 轉運站', `<b>${n.name}</b>：目前此處沒有其他岔路方向可供選擇。`);
+        }
       }
       break;
     case 'casino':
@@ -1425,112 +1715,191 @@ async function resolveNode(p) {
   renderAll();
 }
 
+/* =========================================================
+   拉斯維加斯賭場（現金/點數任選、可連續下注、線上即時觀戰）
+========================================================= */
+let casinoResolver = null;
+let casinoActorBusy = false;
+const SUITS = ['♥️', '♦️', '♠️', '♣️'];
+
+function cardLabel(v) { return ({ 1: 'A', 11: 'J', 12: 'Q', 13: 'K' })[v] || v; }
+function dealCard() { const v = rnd(1, 13); const s = pick(SUITS); return { val: v, label: cardLabel(v), suit: s, red: (s === '♥️' || s === '♦️') }; }
+function cardHTML(c, dim) {
+  if (!c) return `<div class="poker-card black" style="opacity:.25; display:flex; align-items:center; justify-content:center; font-size:42px;">?</div>`;
+  return `<div class="poker-card ${c.red ? 'red' : 'black'} ${dim ? 'opacity-60' : ''}"><div class="text-left">${c.label}</div><div class="text-center text-4xl">${c.suit}</div><div class="text-right">${c.label}</div></div>`;
+}
+
+/* 我是否為目前正在賭博的行動玩家 */
+function amICasinoActor() {
+  if (!state || !state.casinoLive) return false;
+  if (playMode === 'local') return true;
+  const me = state.players.find(pl => peer && pl.peerId === peer.id);
+  return !!(me && me.id === state.casinoLive.pid);
+}
+
+function casinoAct(v) { if (casinoResolver) { const r = casinoResolver; casinoResolver = null; r(v); } }
+window.casinoAct = casinoAct;
+
+/* 行動者可操作的賭場面板 */
+function renderCasinoActing() {
+  const cl = state.casinoLive; if (!cl) return;
+  const p = curPlayer();
+  let resultBlock = '';
+  if (cl.phase === 'reveal' && cl.lastResult) {
+    const lr = cl.lastResult;
+    const color = lr.outcome === 'win' ? '#34d399' : (lr.outcome === 'tie' ? '#8a98b3' : '#f87171');
+    const txt = lr.outcome === 'win' ? `🎉 猜對了！贏得 ${lr.gainDisp}` : (lr.outcome === 'tie' ? `🤝 平手，退還 ${lr.betDisp}` : `💥 猜錯了，損失 ${lr.betDisp}`);
+    resultBlock = `<div class="text-center font-bold mb-3 text-sm" style="color:${color}">${txt}</div>`;
+  }
+  const cardsBlock = `<div class="flex justify-center gap-4 my-4">${cardHTML(cl.first, cl.phase === 'reveal')}${cl.phase === 'reveal' ? cardHTML(cl.second) : ''}</div>`;
+  let controls;
+  if (cl.phase === 'bet') {
+    controls = `
+      <div class="flex gap-2 mb-3">
+        <select id="casinoCurrency" class="seg text-sm" style="flex:1" onchange="(function(){var b=document.getElementById('casinoBet'); if(b) b.value=this.value==='cash'? Math.min(50, Math.max(0, ${p.cash})) : Math.min(50, ${p.points});}).call(this)">
+          <option value="cash">💵 現金（$${fmt(p.cash)}）</option>
+          <option value="points">🔵 點數（${p.points} PP）</option>
+        </select>
+        <input id="casinoBet" type="number" min="1" value="${Math.min(50, Math.max(1, p.cash))}" class="seg text-sm font-bold mono" style="flex:1" placeholder="下注金額">
+      </div>
+      <div class="flex gap-2">
+        <button class="btn btn-gold py-2 text-sm" style="flex:1" onclick="casinoAct('high')">🔼 更大</button>
+        <button class="btn btn-gold py-2 text-sm" style="flex:1" onclick="casinoAct('low')">🔽 更小</button>
+        <button class="btn btn-ghost py-2 px-3 text-sm" onclick="casinoAct('end')">🚪 結束賭局</button>
+      </div>`;
+  } else {
+    controls = `
+      <div class="flex gap-2">
+        <button class="btn btn-gold py-2 text-sm" style="flex:1" onclick="casinoAct('again')">🔁 再賭一局</button>
+        <button class="btn btn-ghost py-2 text-sm" style="flex:1" onclick="casinoAct('end')">🚪 結束賭局</button>
+      </div>`;
+  }
+  $('casinoBody').innerHTML = `
+    <div class="text-center mb-2">
+      <div class="display text-xl font-bold text-[#d97706]">🎰 拉斯維加斯賭場</div>
+      <div class="text-[11px] text-[#8a98b3] mt-0.5">撲克牌比大小：猜中下一張更大／更小，可贏得雙倍下注</div>
+    </div>
+    <div class="flex justify-center gap-4 text-xs mb-1">
+      <span class="text-[#8a98b3]">💵 現金：<b class="text-[#f5c451] mono">$${fmt(p.cash)}</b></span>
+      <span class="text-[#8a98b3]">🔵 點數：<b class="text-[#60a5fa] mono">${p.points} PP</b></span>
+      <span class="text-[#8a98b3]">已玩 <b class="text-white">${cl.rounds}</b> 局</span>
+    </div>
+    ${cardsBlock}
+    ${resultBlock}
+    ${controls}
+  `;
+  $('casinoPanel').style.display = 'flex';
+}
+
+/* 其他玩家的唯讀觀戰面板 */
+function renderCasinoSpectator() {
+  const cl = state.casinoLive; if (!cl) return;
+  const actor = state.players.find(x => x.id === cl.pid);
+  let resultBlock = '';
+  if (cl.phase === 'reveal' && cl.lastResult) {
+    const lr = cl.lastResult;
+    const color = lr.outcome === 'win' ? '#34d399' : (lr.outcome === 'tie' ? '#8a98b3' : '#f87171');
+    const txt = lr.outcome === 'win' ? `🎉 猜對！贏得 ${lr.gainDisp}` : (lr.outcome === 'tie' ? `🤝 平手退還 ${lr.betDisp}` : `💥 猜錯，損失 ${lr.betDisp}`);
+    resultBlock = `<div class="text-center font-bold mb-3 text-sm" style="color:${color}">${txt}</div>`;
+  }
+  const cardsBlock = `<div class="flex justify-center gap-4 my-4">${cardHTML(cl.first, cl.phase === 'reveal')}${cl.phase === 'reveal' ? cardHTML(cl.second) : ''}</div>`;
+  $('casinoBody').innerHTML = `
+    <div class="text-center mb-2">
+      <div class="display text-xl font-bold text-[#d97706]">🎰 賭場觀戰中</div>
+      <div class="text-sm mt-1 font-bold" style="color:${actor ? actor.color : '#fff'}">${actor ? actor.icon + ' ' + actor.name : ''} 正在賭場博弈…</div>
+    </div>
+    <div class="flex justify-center gap-4 text-xs mb-1">
+      <span class="text-[#8a98b3]">💵 現金：<b class="text-[#f5c451] mono">$${fmt(cl.cash)}</b></span>
+      <span class="text-[#8a98b3]">🔵 點數：<b class="text-[#60a5fa] mono">${cl.points} PP</b></span>
+      <span class="text-[#8a98b3]">已玩 <b class="text-white">${cl.rounds}</b> 局</span>
+    </div>
+    ${cardsBlock}
+    ${resultBlock}
+    <div class="text-center text-[11px] text-[#8a98b3] mt-2">⏳ 對方賭博中，計時暫停，請稍候…</div>
+  `;
+  $('casinoPanel').style.display = 'flex';
+}
+
+/* 由 renderAll 呼叫：非行動者依 state.casinoLive 顯示／隱藏觀戰面板 */
+function updateCasinoView() {
+  if (casinoActorBusy) return; // 行動者由 runCasino 自行管理面板
+  if (state && state.casinoLive) {
+    renderCasinoSpectator();
+  } else if ($('casinoPanel') && $('casinoPanel').style.display !== 'none') {
+    $('casinoPanel').style.display = 'none';
+  }
+}
+
 async function runCasino(p) {
-  log(`🎰 <b>${p.name}</b> 進入中央賭場！`, '#d97706');
+  log(`🎰 <b>${p.name}</b> 進入拉斯維加斯賭場！`, '#d97706');
   state.turnActions.push(`🎰 進入賭場`);
-  
-  if (p.points <= 0) {
-    await alertModal('🎰 賭場臨櫃', '「抱歉，您的點數已歸零，無法進行博弈下注！」');
-    return;
+  stopTimer();
+  casinoActorBusy = true;
+  state.casinoLive = { pid: p.id, name: p.name, color: p.color, cash: p.cash, points: p.points, first: null, second: null, phase: 'bet', lastResult: null, rounds: 0 };
+
+  while (true) {
+    const first = dealCard();
+    state.casinoLive.first = first;
+    state.casinoLive.second = null;
+    state.casinoLive.phase = 'bet';
+    state.casinoLive.cash = p.cash;
+    state.casinoLive.points = p.points;
+    syncState();
+    renderCasinoActing();
+
+    const action = await new Promise(res => { casinoResolver = res; });
+    if (action === 'end') break;
+
+    const cur = ($('casinoCurrency') && $('casinoCurrency').value) || 'cash';
+    const curName = cur === 'cash' ? '現金' : '點數';
+    const bal = cur === 'cash' ? p.cash : p.points;
+    let bet = parseInt($('casinoBet') ? $('casinoBet').value : '0') || 0;
+    if (bet < 1) { await alertModal('下注無效', '請輸入至少 1 的下注金額。'); continue; }
+    if (bet > bal) { await alertModal('餘額不足', `您的${curName}餘額不足（目前 ${cur === 'cash' ? '$' + fmt(p.cash) : p.points + ' PP'}）。`); continue; }
+
+    if (cur === 'cash') p.cash -= bet; else p.points -= bet;
+
+    const second = dealCard();
+    let outcome = 'lose';
+    if (second.val === first.val) outcome = 'tie';
+    else if ((action === 'high' && second.val > first.val) || (action === 'low' && second.val < first.val)) outcome = 'win';
+
+    let gain = 0;
+    if (outcome === 'win') { gain = bet * 2; if (cur === 'cash') p.cash += gain; else p.points += gain; }
+    else if (outcome === 'tie') { gain = bet; if (cur === 'cash') p.cash += gain; else p.points += gain; }
+
+    const betTxt = cur === 'cash' ? '$' + fmt(bet) : bet + ' PP';
+    const gainTxt = cur === 'cash' ? '$' + fmt(gain) : gain + ' PP';
+    const dirTxt = action === 'high' ? '更大' : '更小';
+    if (outcome === 'win') {
+      log(`🎰 <b>${p.name}</b> 以${curName} ${betTxt} 預測【${dirTxt}】，開出 ${second.suit}${second.label} 獲勝，贏得 ${gainTxt}！`, '#34d399');
+      state.turnActions.push(`🎰 賭場以${curName} ${betTxt} 預測【${dirTxt}】獲勝，贏得 ${gainTxt}`);
+    } else if (outcome === 'tie') {
+      log(`🎰 <b>${p.name}</b> 賭場平手，退還${curName} ${betTxt}。`, '#8a98b3');
+      state.turnActions.push(`🎰 賭場以${curName} ${betTxt} 預測【${dirTxt}】平手退還`);
+    } else {
+      log(`🎰 <b>${p.name}</b> 以${curName} ${betTxt} 預測【${dirTxt}】，開出 ${second.suit}${second.label} 失利，損失 ${betTxt}。`, '#f87171');
+      state.turnActions.push(`🎰 賭場以${curName} ${betTxt} 預測【${dirTxt}】失利，損失 ${betTxt}`);
+    }
+
+    state.casinoLive.second = second;
+    state.casinoLive.phase = 'reveal';
+    state.casinoLive.lastResult = { outcome, curName, bet, gain, betDisp: betTxt, gainDisp: gainTxt };
+    state.casinoLive.rounds++;
+    state.casinoLive.cash = p.cash;
+    state.casinoLive.points = p.points;
+    syncState();
+    renderCasinoActing();
+
+    const cont = await new Promise(res => { casinoResolver = res; });
+    if (cont === 'end') break;
   }
-  
-  const suits = ['♥️', '♦️', '♠️', '♣️'];
-  const firstVal = rnd(1, 13);
-  const firstSuit = pick(suits);
-  const isRed = firstSuit === '♥️' || firstSuit === '♦️';
-  const valLabel = { 1: 'A', 11: 'J', 12: 'Q', 13: 'K' }[firstVal] || firstVal;
-  
-  const pokerCardHTML = `
-    <div class="flex justify-center my-4">
-      <div class="poker-card ${isRed ? 'red' : 'black'}">
-        <div class="text-left">${valLabel}</div>
-        <div class="text-center text-4xl">${firstSuit}</div>
-        <div class="text-right">${valLabel}</div>
-      </div>
-    </div>
-  `;
-  
-  const maxBet = p.points;
-  const ans = await showChoice('🎰 撲克牌比大小 (High/Low)', `
-    發出第一張牌，請預測下一張牌點數會更大還是更小，猜對可贏得雙倍點數：<br>
-    ${pokerCardHTML}
-    您當前擁有的點數：<span class="mono text-[#60a5fa] font-bold">${p.points} PP</span>
-    <div class="mt-3">
-      <label class="text-xs text-[#8a98b3]">請輸入押注點數 (最大: ${maxBet})：</label>
-      <input id="casinoBet" type="number" min="1" max="${maxBet}" value="${Math.min(50, maxBet)}" class="seg mt-1 text-sm font-bold mono">
-    </div>
-  `, [
-    { label: '🎲 預測下一張【更大】', value: 'high', cls: 'btn-gold' },
-    { label: '🎲 預測下一張【更小】', value: 'low', cls: 'btn-gold' },
-    { label: '🚪 謝絕博弈，直接離開', value: false, cls: 'btn-ghost' }
-  ]);
-  
-  if (!ans) {
-    log(`🎰 <b>${p.name}</b> 拒絕在賭場下注並離開。`, p.color);
-    state.turnActions.push(`🎰 拒絕博弈，離開賭場`);
-    return;
-  }
-  
-  const bet = Math.max(1, Math.min(maxBet, parseInt($('casinoBet').value) || 10));
-  p.points -= bet;
-  
-  const secondVal = rnd(1, 13);
-  const secondSuit = pick(suits);
-  const secondIsRed = secondSuit === '♥️' || secondSuit === '♦️';
-  const secondValLabel = { 1: 'A', 11: 'J', 12: 'Q', 13: 'K' }[secondVal] || secondVal;
-  
-  const secondCardHTML = `
-    <div class="flex justify-center gap-4 my-4">
-      <div class="poker-card ${isRed ? 'red' : 'black'} opacity-60">
-        <div class="text-left">${valLabel}</div>
-        <div class="text-center text-4xl">${firstSuit}</div>
-        <div class="text-right">${valLabel}</div>
-      </div>
-      <div class="poker-card ${secondIsRed ? 'red' : 'black'}">
-        <div class="text-left">${secondValLabel}</div>
-        <div class="text-center text-4xl">${secondSuit}</div>
-        <div class="text-right">${secondValLabel}</div>
-      </div>
-    </div>
-  `;
-  
-  let result = 'lose';
-  if (secondVal === firstVal) {
-    result = 'tie';
-  } else if ((ans === 'high' && secondVal > firstVal) || (ans === 'low' && secondVal < firstVal)) {
-    result = 'win';
-  }
-  
-  if (result === 'win') {
-    const gain = bet * 2;
-    p.points += gain;
-    log(`🎰 賭局大捷！<b>${p.name}</b> 下注 ${bet} PP，開出 ${secondSuit}${secondValLabel} 贏得點數 ${gain} PP。`, '#34d399');
-    state.turnActions.push(`🎰 賭場下注 ${bet} PP 預測【${ans === 'high' ? '更大' : '更小'}】，第二張開出 ${secondSuit}${secondValLabel} 獲勝！贏得 ${gain} PP`);
-    await alertModal('🎰 賭場開牌：獲勝！', `
-      ${secondCardHTML}
-      開牌結果：第二張為 <b>${secondSuit} ${secondValLabel}</b>！<br>
-      預測成功！獲得點數 <span class="mono text-[#34d399] font-bold">+${bet} PP</span>！
-    `);
-  } 
-  else if (result === 'tie') {
-    p.points += bet; 
-    log(`🎰 賭局和局。<b>${p.name}</b> 下注 ${bet} PP 全額退回。`, '#8a98b3');
-    state.turnActions.push(`🎰 賭場下注 ${bet} PP 預測【${ans === 'high' ? '更大' : '更小'}】，開出同點數，平手退還`);
-    await alertModal('🎰 賭場開牌：和局', `
-      ${secondCardHTML}
-      開牌結果：第二張同樣是 <b>${secondSuit} ${secondValLabel}</b>！<br>
-      點數相同，已退還您押注的 ${bet} PP 賭金。
-    `);
-  } 
-  else {
-    log(`🎰 賭局失利！<b>${p.name}</b> 下注 ${bet} PP，開出 ${secondSuit}${secondValLabel} 慘遭沒收。`, '#f87171');
-    state.turnActions.push(`🎰 賭場下注 ${bet} PP 預測【${ans === 'high' ? '更大' : '更小'}】，第二張開出 ${secondSuit}${secondValLabel} 預測失敗！損失 ${bet} PP`);
-    await alertModal('🎰 賭場開牌：猜錯了！', `
-      ${secondCardHTML}
-      開牌結果：第二張為 <b>${secondSuit} ${secondValLabel}</b>！<br>
-      預測失敗，損失押注的 <span class="mono text-[#f87171] font-bold">-${bet} PP</span> 點數。
-    `);
-  }
+
+  state.casinoLive = null;
+  casinoActorBusy = false;
+  $('casinoPanel').style.display = 'none';
+  log(`🎰 <b>${p.name}</b> 結束賭局，離開賭場。`, '#d97706');
+  state.turnActions.push(`🎰 離開賭場`);
   syncState();
   renderAll();
 }
@@ -1556,8 +1925,15 @@ function isMonopoly(n) {
 }
 
 function rentDue(payer, owner, n) {
+  // 查封卡效果：過路費歸零
+  if (state.seals && state.seals.some(s => s.group === n.group)) return 0;
+  
   let r = inf(n.baseRent) * HOUSE_MULT[n.level];
   if (isMonopoly(n)) r *= 2;
+  
+  // 漲價卡效果：過路費加倍
+  if (state.priceHikes && state.priceHikes.some(h => h.group === n.group)) r *= 2;
+  
   if (owner.tsunamiTurns > 0) r = Math.round(r * 0.5);
   if (hasDeity(payer, 'land')) {
     r = payer.deity.big ? 0 : Math.round(r * 0.5);
@@ -1806,22 +2182,42 @@ async function endTurn() {
   stopTimer();
   busy = false;
   
+  const cp = curPlayer();
+  if (cp.diceCountTurns && cp.diceCountTurns > 0) {
+    cp.diceCountTurns--;
+    if (cp.diceCountTurns <= 0) {
+      const oldCount = cp.diceCount;
+      cp.diceCount = 1;
+      cp.diceCountTurns = 0;
+      log(`${oldCount === 2 ? '🏍️' : '🏎️'} <b>${cp.name}</b> 的${oldCount === 2 ? '機車' : '汽車'}效果已結束，恢復單骰模式。`, '#8a98b3');
+    }
+  }
+  
   const p = curPlayer();
   
   if (alivePlayers().length <= 1) return gameOver();
   
-  let next = state.current;
-  do {
-    next = (next + 1) % state.players.length;
-  } while (!state.players[next].alive);
-  
-  if (next <= state.current) {
-    state.round++;
-    await onRoundEnd();
-    if (alivePlayers().length <= 1) return gameOver();
+  if (!state.turnOrder || state.turnOrder.length === 0) {
+    state.turnOrder = shuffleArray(alivePlayers().map(pl => pl.id));
+    state.currentOrderIndex = state.turnOrder.indexOf(state.current);
+    if (state.currentOrderIndex === -1) state.currentOrderIndex = 0;
   }
   
-  state.current = next;
+  let nextOrderIndex = state.currentOrderIndex;
+  do {
+    nextOrderIndex++;
+    if (nextOrderIndex >= state.turnOrder.length) {
+      state.round++;
+      await onRoundEnd();
+      if (alivePlayers().length <= 1) return gameOver();
+      state.turnOrder = shuffleArray(alivePlayers().map(pl => pl.id));
+      nextOrderIndex = 0;
+      break;
+    }
+  } while (!state.players[state.turnOrder[nextOrderIndex]].alive);
+  
+  state.currentOrderIndex = nextOrderIndex;
+  state.current = state.turnOrder[state.currentOrderIndex];
   
   // 同步新回合狀態
   syncState();
@@ -1859,6 +2255,28 @@ async function onRoundEnd() {
   } else if (state.round % config.infTurn === 0) {
     triggerInflation('循環週期通膨');
   }
+  
+  // 結算漲價卡效果
+  if (state.priceHikes) {
+    state.priceHikes.forEach(h => h.turnsLeft--);
+    const expired = state.priceHikes.filter(h => h.turnsLeft <= 0);
+    expired.forEach(h => {
+      const gName = MAP.nodes.find(n => n.group === h.group && n.groupName);
+      if (gName) log(`💹 「${gName.groupName}」路段的漲價效果已結束。`, '#8a98b3');
+    });
+    state.priceHikes = state.priceHikes.filter(h => h.turnsLeft > 0);
+  }
+  // 結算查封卡效果
+  if (state.seals) {
+    state.seals.forEach(s => s.turnsLeft--);
+    const expired = state.seals.filter(s => s.turnsLeft <= 0);
+    expired.forEach(s => {
+      const gName = MAP.nodes.find(n => n.group === s.group && n.groupName);
+      if (gName) log(`🔏 「${gName.groupName}」路段的查封已解除。`, '#8a98b3');
+    });
+    state.seals = state.seals.filter(s => s.turnsLeft > 0);
+  }
+  
   renderAll();
 }
 
@@ -1897,14 +2315,39 @@ function fluctuateStocks() {
   state.stocks.forEach(s => {
     s.prev = s.price;
     s.ref = s.price;
-    const drift = (rnd(-60, 65)) / 1000;
-    moveStock(s, 1 + drift);
+    
+    // 檢查紅卡/黑卡覆蓋效果
+    const override = (state.stockOverrides || []).find(o => o.ticker === s.ticker);
+    if (override) {
+      if (override.direction === 'up') {
+        moveStock(s, 1 + STOCK_LIMIT);
+        s.limit = 1;
+      } else {
+        moveStock(s, 1 - STOCK_LIMIT);
+        s.limit = -1;
+      }
+    } else {
+      const drift = (rnd(-60, 65)) / 1000;
+      moveStock(s, 1 + drift);
+    }
     
     s.hist.push(s.price);
     if (s.hist.length > 30) s.hist.shift();
     
     s.limit = 0;
   });
+  
+  // 結算紅卡/黑卡效果
+  if (state.stockOverrides) {
+    state.stockOverrides.forEach(o => o.turnsLeft--);
+    const expired = state.stockOverrides.filter(o => o.turnsLeft <= 0);
+    expired.forEach(o => {
+      const s = state.stocks.find(x => x.ticker === o.ticker);
+      if (s) log(`${o.direction === 'up' ? '📈' : '📉'} 「${s.name}」的${o.direction === 'up' ? '紅卡漲停' : '黑卡跌停'}操控已到期。`, '#8a98b3');
+    });
+    state.stockOverrides = state.stockOverrides.filter(o => o.turnsLeft > 0);
+  }
+  
   log(`📈 證券交易所本日收盤：全球市場資產價格隨通膨與熱錢微幅起伏。`, 'var(--blue)');
 }
 
@@ -1993,7 +2436,8 @@ function renderStock() {
     
     const pQty = getStockQty(p, s.ticker);
     const pPledge = p.pledged[s.ticker] || { shares: 0, loan: 0 };
-    const maxBuy = Math.floor(p.cash / s.price);
+    const maxBuyByCash = Math.floor(p.cash / s.price);
+    const maxBuy = config.stockLimit && s.availableShares !== Infinity ? Math.min(maxBuyByCash, s.availableShares) : maxBuyByCash;
     const pAvg = getStockAvgCost(p, s.ticker);
     const pnlAmt = pQty > 0 ? Math.round((s.price - pAvg) * pQty) : 0;
     const pnlPct = (pQty > 0 && pAvg > 0) ? ((s.price - pAvg) / pAvg * 100) : 0;
@@ -2017,6 +2461,10 @@ function renderStock() {
             <div class="mono text-right font-bold text-md text-[#e6edf7]">$${fmt(s.price)}</div>
             <div class="text-[#8a98b3]">本日漲跌</div>
             <div class="mono text-right font-bold ${colorClass}">${diff > 0 ? '+' : ''}${pct}%</div>
+            ${config.stockLimit ? `
+            <div class="text-[#8a98b3]">市場剩餘股數</div>
+            <div class="mono text-right font-bold text-[#f5c451]">${s.availableShares === Infinity ? '無限制' : s.availableShares} / ${s.totalShares} 股</div>
+            ` : ''}
             <div class="text-[#8a98b3]">您持有的股份</div>
             <div class="mono text-right font-bold text-[#34d399]">${pQty} 股</div>
             ${pQty > 0 ? `
@@ -2153,6 +2601,10 @@ function tradeStock(type) {
       alertModal('資金不足', `現金不足！購買 ${val} 股需花費 $${fmt(cost)}。`);
       return;
     }
+    if (config.stockLimit && s.availableShares !== Infinity && val > s.availableShares) {
+      alertModal('市場供給不足', `「${s.name}」目前僅剩 ${s.availableShares} 股可供購買。`);
+      return;
+    }
     p.cash -= cost;
     p.turnSpent = (p.turnSpent || 0) + cost;
     
@@ -2164,6 +2616,10 @@ function tradeStock(type) {
     const totalCost = (current.qty * current.avgCost) + cost;
     current.qty += val;
     current.avgCost = Math.round(totalCost / current.qty);
+    
+    if (config.stockLimit && s.availableShares !== Infinity) {
+      s.availableShares -= val;
+    }
     
     log(`📈 <b>${p.name}</b> 買進了 ${val} 股「${s.name}」（單價 $${fmt(s.price)}）。`, p.color);
     state.turnActions.push(`📈 買進 ${val} 股「${s.name}」（單價 $${fmt(s.price)}）`);
@@ -2186,6 +2642,11 @@ function tradeStock(type) {
     if (p.stocks[s.ticker].qty === 0) {
       delete p.stocks[s.ticker];
     }
+    
+    if (config.stockLimit && s.availableShares !== Infinity) {
+      s.availableShares += val;
+    }
+    
     log(`📉 <b>${p.name}</b> 賣出了 ${val} 股「${s.name}」（單價 $${fmt(s.price)}），變現 $${fmt(earn)}。`, p.color);
     state.turnActions.push(`📉 賣出 ${val} 股「${s.name}」（單價 $${fmt(s.price)}）`);
     if (!p.tradeLog) p.tradeLog = [];
@@ -2463,7 +2924,7 @@ function renderItems() {
     `}
     
     <div>
-      <div class="text-xs font-bold text-[#34d399] mb-2">💼 您的背包（上限 3 張）</div>
+      <div class="text-xs font-bold text-[#34d399] mb-2">💼 您的背包（上限 7 張）</div>
       <div class="flex flex-col gap-2">
         ${myItemsHTML}
       </div>
@@ -2480,8 +2941,8 @@ function buyItem(itemKey) {
     alertModal('無法購買', '道具卡只能在地圖上的「🛒 道具商店」格購買。');
     return;
   }
-  if (p.items.length >= 3) {
-    alertModal('購買失敗', '您的卡片包已滿（上限持有 3 張道具卡）。');
+  if (p.items.length >= 7) {
+    alertModal('購買失敗', '您的卡片包已滿（上限持有 7 張道具卡）。');
     return;
   }
   if (p.points < item.price) {
@@ -2600,7 +3061,7 @@ async function useItem(itemKey, index) {
     const big = Math.random() < 0.20;
     p.deity = { type: rType, big, turns: 5 };
     log(`📜 <b>${p.name}</b> 使用請神符召喚了【${DEITIES[rType].name}${big ? ' (大)' : ''}】！`, DEITIES[rType].color);
-    await alertModal('✨ 請神成功', `召喚了【<b>${DEITIES[rType].name}${big ? ' (大)' : ''}</b>】附身，持續 5 回合！`);
+    await alertModal('✨ 請神成功', `召喚了【<b>${DEITIES[rType].name}${big ? ' (大)' : ''}</b>】附身，持續 5 回合！<div class="mt-2 p-2 rounded border text-xs leading-relaxed" style="border-color:${DEITIES[rType].color}55; background:${DEITIES[rType].color}15; color:${DEITIES[rType].color}">📜 神明功能：${deityEffectText(rType)}</div>`);
   } 
   else if (itemKey === 'dismiss') {
     if (!p.deity) {
@@ -2613,6 +3074,197 @@ async function useItem(itemKey, index) {
     p.deity = null;
     log(`🧧 <b>${p.name}</b> 使用送神符送走了身上的神明。`, p.color);
     await alertModal('🧧 送神成功', `成功送走身上的【${oldName}】！`);
+  }
+  else if (itemKey === 'bazooka') {
+    const rivals = state.players.filter(r => r.id !== p.id && r.alive);
+    if (rivals.length === 0) return;
+    const buttons = rivals.map(r => ({ label: `${r.icon} ${r.name}`, value: r.id, cls: 'btn-red' }));
+    const targetId = await showChoice('🚀 發射火箭筒', '選擇要轟炸哪一位對手（對方將送醫 3 回合）：', buttons);
+    if (targetId !== undefined) {
+      p.items.splice(index, 1);
+      closePanels();
+      const rival = state.players[targetId];
+      rival.skipTurns = 3;
+      rival.node = 13;
+      log(`🚀 <b>${p.name}</b> 對 <b>${rival.name}</b> 發射了火箭筒！${rival.name} 受傷送醫 3 回合！`, '#f87171');
+      state.turnActions.push(`🚀 使用「火箭筒」轟炸了 ${rival.name}`);
+      await alertModal('🚀 火箭筒命中！', `<b>${rival.name}</b> 被火箭筒直接命中，傷重送醫！<br>未來 <b>3 回合</b>將無法行動。`);
+    }
+  }
+  else if (itemKey === 'demolish') {
+    const allProps = MAP.nodes.filter(n => n.type === 'property' && n.owner !== null);
+    if (allProps.length === 0) { alertModal('無法使用', '場上沒有任何已購買的地產。'); return; }
+    const buttons = allProps.map(n => {
+      const owner = state.players[n.owner];
+      return { label: `${owner.icon} ${owner.name} 的「${n.name}」(${HOUSE_LABEL[n.level]})`, value: n.id, cls: 'btn-red' };
+    });
+    const targetNodeId = await showChoice('🏚️ 拆除目標', '選擇要拆除的地產（降一級，空地則收回為無主地）：', buttons);
+    if (targetNodeId !== undefined) {
+      p.items.splice(index, 1);
+      closePanels();
+      const n = nodeById(targetNodeId);
+      const ownerName = state.players[n.owner].name;
+      if (n.level > 0) {
+        n.level--;
+        log(`🏚️ <b>${p.name}</b> 拆 sublevel 了 ${ownerName} 的「${n.name}」，降為${HOUSE_LABEL[n.level]}。`, '#f87171');
+        await alertModal('🏚️ 拆除完成', `「${n.name}」已被降級為 <b>${HOUSE_LABEL[n.level]}</b>。`);
+      } else {
+        n.owner = null;
+        log(`🏚️ <b>${p.name}</b> 拆 sublevel 了 ${ownerName} 的「${n.name}」，該地已收回為無主地！`, '#f87171');
+        await alertModal('🏚️ 土地收回', `「${n.name}」已被拆除並收回為<b>無主地</b>！`);
+      }
+    }
+  }
+  else if (itemKey === 'redcard') {
+    const buttons = state.stocks.map(s => ({ label: `${s.name} (${s.ticker}) $${fmt(s.price)}`, value: s.ticker, cls: 'btn-green' }));
+    const ticker = await showChoice('📈 紅卡 — 漲停操控', '選擇要連續 3 天漲停的股票：', buttons);
+    if (ticker !== undefined) {
+      p.items.splice(index, 1);
+      closePanels();
+      if (!state.stockOverrides) state.stockOverrides = [];
+      state.stockOverrides.push({ ticker, direction: 'up', turnsLeft: 3 });
+      const s = state.stocks.find(x => x.ticker === ticker);
+      log(`📈 <b>${p.name}</b> 對「${s.name}」施放紅卡！連續 3 天漲停！`, '#34d399');
+      state.turnActions.push(`📈 使用「紅卡」操控 ${s.name} 漲停 3 天`);
+      await alertModal('📈 紅卡生效', `「<b>${s.name}</b>」將在未來 3 輪強制漲停板！`);
+    }
+  }
+  else if (itemKey === 'blackcard') {
+    const buttons = state.stocks.map(s => ({ label: `${s.name} (${s.ticker}) $${fmt(s.price)}`, value: s.ticker, cls: 'btn-red' }));
+    const ticker = await showChoice('📉 黑卡 — 跌停操控', '選擇要連續 3 天跌停的股票：', buttons);
+    if (ticker !== undefined) {
+      p.items.splice(index, 1);
+      closePanels();
+      if (!state.stockOverrides) state.stockOverrides = [];
+      state.stockOverrides.push({ ticker, direction: 'down', turnsLeft: 3 });
+      const s = state.stocks.find(x => x.ticker === ticker);
+      log(`📉 <b>${p.name}</b> 對「${s.name}」施放黑卡！連續 3 天跌停！`, '#f87171');
+      state.turnActions.push(`📉 使用「黑卡」操控 ${s.name} 跌停 3 天`);
+      await alertModal('📉 黑卡生效', `「<b>${s.name}</b>」將在未來 3 輪強制跌停板！`);
+    }
+  }
+  else if (itemKey === 'taxcard') {
+    const rivals = state.players.filter(r => r.id !== p.id && r.alive);
+    if (rivals.length === 0) return;
+    const buttons = rivals.map(r => ({ label: `${r.icon} ${r.name} (現金 $${fmt(r.cash)})`, value: r.id, cls: 'btn-gold' }));
+    const targetId = await showChoice('💰 查稅卡', '選擇要向誰徵收 20% 現金稅：', buttons);
+    if (targetId !== undefined) {
+      p.items.splice(index, 1);
+      closePanels();
+      const rival = state.players[targetId];
+      const tax = Math.round(rival.cash * 0.2);
+      rival.cash -= tax;
+      p.cash += tax;
+      log(`💰 <b>${p.name}</b> 向 <b>${rival.name}</b> 徵收了 $${fmt(tax)} 稅金！`, '#f5c451');
+      state.turnActions.push(`💰 使用「查稅卡」向 ${rival.name} 徵收 $${fmt(tax)}`);
+      await alertModal('💰 稅金徵收成功', `成功從 <b>${rival.name}</b> 身上徵收了 <span class="mono text-[#f5c451]">$${fmt(tax)}</span> 的稅金！`);
+    }
+  }
+  else if (itemKey === 'pricehike') {
+    const GROUPS_LIST = [];
+    MAP.nodes.forEach(n => { if (n.type === 'property' && n.groupName && !GROUPS_LIST.find(g => g.idx === n.group)) GROUPS_LIST.push({ idx: n.group, name: n.groupName, color: n.groupColor }); });
+    if (GROUPS_LIST.length === 0) return;
+    const buttons = GROUPS_LIST.map(g => ({ label: `▰ ${g.name}`, value: g.idx, cls: 'btn-gold' }));
+    const grpIdx = await showChoice('💹 漲價卡', '選擇要使哪個路段的過路費加倍（持續 5 輪）：', buttons);
+    if (grpIdx !== undefined) {
+      p.items.splice(index, 1);
+      closePanels();
+      if (!state.priceHikes) state.priceHikes = [];
+      state.priceHikes.push({ group: grpIdx, turnsLeft: 5 });
+      const gName = GROUPS_LIST.find(g => g.idx === grpIdx).name;
+      log(`💹 <b>${p.name}</b> 使「${gName}」路段過路費加倍 5 輪！`, '#f5c451');
+      state.turnActions.push(`💹 使用「漲價卡」讓 ${gName} 路段漲價`);
+      await alertModal('💹 漲價卡生效', `「<b>${gName}</b>」路段所有地產的過路費在未來 5 輪內<b>加倍</b>！`);
+    }
+  }
+  else if (itemKey === 'seal') {
+    const GROUPS_LIST = [];
+    MAP.nodes.forEach(n => { if (n.type === 'property' && n.groupName && !GROUPS_LIST.find(g => g.idx === n.group)) GROUPS_LIST.push({ idx: n.group, name: n.groupName, color: n.groupColor }); });
+    if (GROUPS_LIST.length === 0) return;
+    const buttons = GROUPS_LIST.map(g => ({ label: `▰ ${g.name}`, value: g.idx, cls: 'btn-red' }));
+    const grpIdx = await showChoice('🔏 查封卡', '選擇要查封哪個路段（停收過路費 5 輪，可反制漲價卡）：', buttons);
+    if (grpIdx !== undefined) {
+      p.items.splice(index, 1);
+      closePanels();
+      if (!state.seals) state.seals = [];
+      state.seals.push({ group: grpIdx, turnsLeft: 5 });
+      if (state.priceHikes) state.priceHikes = state.priceHikes.filter(h => h.group !== grpIdx);
+      const gName = GROUPS_LIST.find(g => g.idx === grpIdx).name;
+      log(`🔏 <b>${p.name}</b> 查封了「${gName}」路段！過路費歸零 5 輪！`, '#60a5fa');
+      state.turnActions.push(`🔏 使用「查封卡」查封 ${gName} 路段`);
+      await alertModal('🔏 查封卡生效', `「<b>${gName}</b>」路段已被查封！未來 5 輪內<b>過路費歸零</b>。<br>同時該路段的漲價效果也被移除。`);
+    }
+  }
+  else if (itemKey === 'auction') {
+    const rivals = state.players.filter(r => r.id !== p.id && r.alive);
+    const rivalProps = [];
+    rivals.forEach(r => { MAP.nodes.forEach(n => { if (n.type === 'property' && n.owner === r.id) rivalProps.push(n); }); });
+    if (rivalProps.length === 0) { alertModal('無法使用', '對手目前沒有任何地產可供拍賣。'); return; }
+    const buttons = rivalProps.map(n => {
+      const owner = state.players[n.owner];
+      return { label: `${owner.icon} ${owner.name} 的「${n.name}」(市價 $${fmt(inf(n.basePrice))})`, value: n.id, cls: 'btn-gold' };
+    });
+    const targetNodeId = await showChoice('🔨 拍賣目標', '選擇要強制拍賣哪塊地產：', buttons);
+    if (targetNodeId !== undefined) {
+      p.items.splice(index, 1);
+      closePanels();
+      const n = nodeById(targetNodeId);
+      const oldOwner = state.players[n.owner];
+      const minBid = inf(n.basePrice);
+      let highestBid = minBid;
+      let highestBidder = null;
+      const bidders = state.players.filter(b => b.alive && b.id !== oldOwner.id && b.cash >= minBid);
+      for (const bidder of bidders) {
+        const bidAmount = parseInt(prompt(`${bidder.name}，請輸入對「${n.name}」的出價（最低 $${fmt(minBid)}，目前最高出價 $${fmt(highestBid)}，您的現金 $${fmt(bidder.cash)}）：\n輸入 0 或取消 = 放棄`)) || 0;
+        if (bidAmount > highestBid && bidAmount <= bidder.cash) {
+          highestBid = bidAmount;
+          highestBidder = bidder;
+        }
+      }
+      if (highestBidder) {
+        highestBidder.cash -= highestBid;
+        oldOwner.cash += highestBid;
+        n.owner = highestBidder.id;
+        log(`🔨 「${n.name}」被 <b>${highestBidder.name}</b> 以 $${fmt(highestBid)} 得標！原主 ${oldOwner.name} 獲得拍賣款。`, '#f5c451');
+        state.turnActions.push(`🔨 拍賣「${n.name}」— ${highestBidder.name} 以 $${fmt(highestBid)} 得標`);
+        await alertModal('🔨 拍賣成交', `「<b>${n.name}</b>」由 <b>${highestBidder.name}</b> 以 $${fmt(highestBid)} 得標！<br>${oldOwner.name} 獲得拍賣款項。`);
+      } else {
+        log(`🔨 「${n.name}」拍賣流標，無人出價。`, '#8a98b3');
+        await alertModal('🔨 拍賣流標', `無人出價達到底價 $${fmt(minBid)}，拍賣流標。`);
+      }
+    }
+  }
+  else if (itemKey === 'staycard') {
+    const targets = state.players.filter(r => r.alive);
+    const buttons = targets.map(r => ({ label: `${r.icon} ${r.name}${r.id === p.id ? ' (自己)' : ''}`, value: r.id, cls: r.id === p.id ? 'btn-gold' : 'btn-red' }));
+    const targetId = await showChoice('⏸️ 停留卡', '選擇要讓誰原地停留一回合：', buttons);
+    if (targetId !== undefined) {
+      p.items.splice(index, 1);
+      closePanels();
+      const target = state.players[targetId];
+      target.skipTurns = (target.skipTurns || 0) + 1;
+      log(`⏸️ <b>${p.name}</b> 讓 <b>${target.name}</b> 原地停留一回合！`, p.color);
+      state.turnActions.push(`⏸️ 使用「停留卡」讓 ${target.name} 停留`);
+      await alertModal('⏸️ 停留卡生效', `<b>${target.name}</b> 將在下一回合原地停留，無法行動。`);
+    }
+  }
+  else if (itemKey === 'motorcycle') {
+    p.items.splice(index, 1);
+    closePanels();
+    p.diceCount = 2;
+    p.diceCountTurns = 5;
+    log(`🏍️ <b>${p.name}</b> 使用了機車卡！接下來 5 回合可擲兩顆骰子！`, p.color);
+    state.turnActions.push(`🏍️ 使用「機車卡」— 雙骰模式 5 回合`);
+    await alertModal('🏍️ 機車卡生效', '您獲得了機車！接下來 <b>5 回合</b>將使用<b>兩顆骰子</b>前進。');
+  }
+  else if (itemKey === 'car') {
+    p.items.splice(index, 1);
+    closePanels();
+    p.diceCount = 3;
+    p.diceCountTurns = 5;
+    log(`🏎️ <b>${p.name}</b> 使用了汽車卡！接下來 5 回合可擲三顆骰子！`, p.color);
+    state.turnActions.push(`🏎️ 使用「汽車卡」— 三骰模式 5 回合`);
+    await alertModal('🏎️ 汽車卡生效', '您獲得了汽車！接下來 <b>5 回合</b>將使用<b>三顆骰子</b>前進。');
   }
   syncState();
   renderAll();
@@ -2647,26 +3299,36 @@ async function onStockExchange(p) {
   );
   
   if (choice === 'free') {
+    const actualFreeQty = config.stockLimit && randomStock.availableShares !== Infinity ? Math.min(10, randomStock.availableShares) : 10;
+    if (actualFreeQty <= 0) {
+      await alertModal('領取失敗', `「<b>${randomStock.name}</b>」在市場上已無剩餘股數可供贈送！`);
+      return;
+    }
     if (!p.stocks[randomStock.ticker]) {
       p.stocks[randomStock.ticker] = { qty: 0, avgCost: 0 };
     }
     const oldQty = getStockQty(p, randomStock.ticker);
     const oldAvg = getStockAvgCost(p, randomStock.ticker);
-    const newQty = oldQty + 10;
+    const newQty = oldQty + actualFreeQty;
     const newAvg = Math.round((oldQty * oldAvg) / newQty);
     p.stocks[randomStock.ticker].qty = newQty;
     p.stocks[randomStock.ticker].avgCost = newAvg;
     
-    log(`📈 <b>${p.name}</b> 在證券交易所獲得了免費的 10 股 ${randomStock.name}！`, p.color);
-    state.turnActions.push(`在證券交易所獲贈 10 股 ${randomStock.name}`);
-    await alertModal('領取成功', `您已獲得 10 股 <b>${randomStock.name}</b>！<br>目前持股：${newQty} 股，平均成本：$${newAvg}`);
+    if (config.stockLimit && randomStock.availableShares !== Infinity) {
+      randomStock.availableShares -= actualFreeQty;
+    }
+    
+    log(`📈 <b>${p.name}</b> 在證券交易所獲得了免費的 ${actualFreeQty} 股 ${randomStock.name}！`, p.color);
+    state.turnActions.push(`在證券交易所獲贈 ${actualFreeQty} 股 ${randomStock.name}`);
+    await alertModal('領取成功', `您已獲得 ${actualFreeQty} 股 <b>${randomStock.name}</b>！<br>目前持股：${newQty} 股，平均成本：$${newAvg}`);
   } else if (choice === 'discount') {
     const discountPrice = Math.round(randomStock.price * 0.9);
     const maxAfford = Math.floor(p.cash / discountPrice);
-    const maxBuy = Math.min(50, maxAfford);
+    const maxLimit = config.stockLimit && randomStock.availableShares !== Infinity ? randomStock.availableShares : Infinity;
+    const maxBuy = Math.min(50, maxAfford, maxLimit);
     
     if (maxBuy <= 0) {
-      await alertModal('資金不足', '您的現金不足以購買任何折扣股票。');
+      await alertModal('無法申購', `您的現金不足，或者「<b>${randomStock.name}</b>」在市場上已無剩餘股數可供申購。`);
       return;
     }
     
@@ -2700,7 +3362,11 @@ async function onStockExchange(p) {
       p.stocks[randomStock.ticker].qty = newQty;
       p.stocks[randomStock.ticker].avgCost = newAvg;
       
-      log(`📈 <b>${p.name}</b> 在證券交易所以 9 折優惠申購了 ${qtyToBuy} 股 ${randomStock.name}！`, p.color);
+      if (config.stockLimit && randomStock.availableShares !== Infinity) {
+        randomStock.availableShares -= qtyToBuy;
+      }
+      
+      log(`📈 <b>${p.name}</b> 在證券交易成功以 9 折優惠申購了 ${qtyToBuy} 股 ${randomStock.name}！`, p.color);
       state.turnActions.push(`折扣申購了 ${qtyToBuy} 股 ${randomStock.name}`);
       await alertModal('申購成功', `您成功以 $${fmt(totalCost)} 申購了 ${qtyToBuy} 股 <b>${randomStock.name}</b>！<br>目前持股：${newQty} 股，平均成本：$${newAvg}`);
     }
@@ -2918,6 +3584,16 @@ function renderSidebar() {
   if (!container || !state) return;
   container.innerHTML = '';
   
+  const sortedPlayers = state.players
+    .filter(pl => pl.alive)
+    .map(pl => ({ id: pl.id, worth: netWorth(pl) }))
+    .sort((a, b) => b.worth - a.worth);
+  
+  const rankMap = {};
+  sortedPlayers.forEach((item, index) => {
+    rankMap[item.id] = index + 1;
+  });
+  
   state.players.forEach(p => {
     if (!p.alive) {
       container.innerHTML += `
@@ -2934,8 +3610,9 @@ function renderSidebar() {
     
     const isCurrent = state.players[state.current].id === p.id;
     const itemsList = p.items.map(k => ITEMS[k] ? ITEMS[k].icon : '').join(' ');
-    const deityText = p.deity ? `<span class="deity-badge" style="background:${DEITIES[p.deity.type].color}; color:#111; padding: 1px 3px; font-size:9px; border-radius:3px;">${DEITIES[p.deity.type].icon}${DEITIES[p.deity.type].name.substring(0,2)}</span>` : '';
+    const deityText = p.deity ? `<span class="deity-badge" title="${deityEffectText(p.deity.type)}" style="background:${DEITIES[p.deity.type].color}; color:#111; padding: 1px 3px; font-size:9px; border-radius:3px; cursor:help;">${DEITIES[p.deity.type].icon}${DEITIES[p.deity.type].name.substring(0,2)}</span>` : '';
     const tsunamiText = p.tsunamiTurns > 0 ? `<span class="text-[9px] text-[#60a5fa] border border-[#60a5fa] px-1 rounded shrink-0">🌊${p.tsunamiTurns}</span>` : '';
+    const rank = rankMap[p.id];
     
     // 生成個人詳細持股清冊小區塊
     let stocksListHTML = '';
@@ -2961,21 +3638,28 @@ function renderSidebar() {
       stocksListHTML += `</div>`;
     }
     
+    const isOnline = playMode === 'local' || p.online !== false;
+    const onlineBadgeText = isOnline 
+      ? `<span class="online-badge text-[9px] text-[#34d399] border border-[#34d399]/40 px-1 rounded shrink-0">🟢 在線</span>` 
+      : `<span class="offline-badge text-[9px] text-[#f87171] border border-[#f87171]/40 px-1 rounded shrink-0">🔴 託管</span>`;
+
     container.innerHTML += `
-      <div class="p-2 border rounded flex flex-col gap-1.5 transition-all ${isCurrent ? 'border-[#f5c451] bg-[#1a2233] glow' : 'border-[#26314a] bg-[#121826]'}" style="border-left-width: 4px; border-left-color: ${p.color};">
+      <div class="p-2 border rounded flex flex-col gap-1.5 transition-all ${isCurrent ? 'border-[#f5c451] bg-[#1a2233] glow' : 'border-[#26314a] bg-[#121826]'}" style="border-left-width: 4px; border-left-color: ${p.color}; cursor: pointer;" title="點擊跳轉到 ${p.name} 的位置" onclick="focusPlayer(${p.id})">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-1.5 overflow-hidden">
-            <span class="pawn scale-90 shrink-0" style="border-color:${p.color}">${p.icon}</span>
+            <span class="pawn scale-90 shrink-0 ${isOnline ? '' : 'offline-grayscale'}" style="border-color:${p.color}">${p.icon}</span>
             <span class="font-bold text-[11px] truncate text-[#e6edf7]">${p.name}</span>
           </div>
           <div class="flex gap-1 shrink-0">
             ${deityText}
             ${tsunamiText}
+            ${playMode === 'online' ? onlineBadgeText : ''}
           </div>
         </div>
         <div class="grid grid-cols-2 gap-x-2 text-[10px] text-[#8a98b3]">
           <div>現金: <span class="mono text-white">$${fmt(p.cash)}</span></div>
           <div>點數: <span class="mono text-[#60a5fa]">${p.points} PP</span></div>
+          <div class="col-span-2">總資產: <span class="mono text-[#f5c451] font-bold">$${fmt(netWorth(p))}</span> <span class="text-[#34d399] font-bold ml-1.5">🏆 #${rank}</span></div>
           <div class="col-span-2 mt-1 truncate">卡片: ${itemsList || '<span class="text-[9px] text-[#55637d]">無卡片</span>'}</div>
         </div>
         ${stocksListHTML}
@@ -2984,8 +3668,13 @@ function renderSidebar() {
   });
 }
 
-function showTurnBriefingModal(p, actions) {
-  const listHTML = actions.map(act => `<li class="mb-1.5 text-xs text-[#e6edf7] flex gap-2"><span>•</span><span>${act}</span></li>`).join('');
+function showTurnBriefingModal(p, actions, nextP) {
+  const listHTML = (actions && actions.length ? actions : ['（本回合沒有特別行動）']).map(act =>
+    `<li class="mb-1.5 text-xs text-[#e6edf7] flex gap-2"><span style="color:${p.color}">${p.icon}</span><span><b style="color:${p.color}">${p.name}</b> ${act}</span></li>`).join('');
+  const nextBlock = nextP ? `
+    <div class="mb-3 p-2 rounded-lg border text-center text-sm font-bold" style="border-color:${nextP.color}66; background:${nextP.color}15; color:${nextP.color}">
+      ▶ 下一位玩家：${nextP.icon} ${nextP.name}
+    </div>` : '';
   
   // 計算本回合現金與身價盈虧
   const cashDiff = p.cash - (p.turnStartCash !== undefined ? p.turnStartCash : p.cash);
@@ -3023,9 +3712,11 @@ function showTurnBriefingModal(p, actions) {
   $('modalBox').innerHTML = `
     <div class="text-center mb-3">
       <div class="display text-lg font-bold text-[#f5c451]">📢 ${p.icon} ${p.name} 的回合簡報</div>
-      <div class="text-[10px] text-[#8a98b3] mt-0.5">該玩家在上個回合中完成了以下行動：</div>
+      <div class="text-[10px] text-[#8a98b3] mt-0.5">上一回合由 <b style="color:${p.color}">${p.name}</b> 行動，完成了以下事項：</div>
     </div>
-    
+
+    ${nextBlock}
+
     ${summaryBlock}
     
     <div class="p-3 border border-[#26314a] bg-[#0b0f17] rounded-lg max-h-[180px] overflow-y-auto scroll mb-4">
@@ -3051,12 +3742,30 @@ function hostOnlineRoom() {
     peer = null;
   }
   peerRole = 'host';
-  const code = 'BLITZ-' + rnd(100000, 999999);
+  // 如果是恢復存檔戰局，使用存檔大廳中的房間代碼（若是自動恢復），否則隨機生成
+  const sessionStr = localStorage.getItem('dc_monopoly_active_session');
+  let savedCode = null;
+  if (sessionStr) {
+    try {
+      const session = JSON.parse(sessionStr);
+      if (session && session.role === 'host' && session.roomCode) {
+        savedCode = session.roomCode;
+      }
+    } catch(e) {}
+  }
+  
+  const code = savedCode || ('BLITZ-' + rnd(100000, 999999));
   peer = new Peer(code);
   
   peer.on('open', id => {
     $('hostRoomCode').textContent = id;
-    onlinePlayers = [{ peerId: id, name: $('name0').value || '房主', icon: $('icon0').value || '🏎️' }];
+    if (isLoadedGame) {
+      // 載入存檔時，不重置 onlinePlayers，它已在 restoreGame() 中載入
+      onlinePlayers[0].peerId = id;
+      onlinePlayers[0].online = true;
+    } else {
+      onlinePlayers = [{ peerId: id, name: $('name0').value || '房主', icon: $('icon0').value || '🏎️', online: true }];
+    }
     updateOnlineLobbyUI();
   });
   
@@ -3065,6 +3774,24 @@ function hostOnlineRoom() {
     
     conn.on('data', data => {
       if (data.type === 'JOIN_ROOM') {
+        if (isLoadedGame) {
+          // 載入存檔大廳：尋找第一個未連線的房客席位
+          const idx = onlinePlayers.findIndex((p, k) => k > 0 && !p.online);
+          if (idx !== -1) {
+            onlinePlayers[idx].peerId = conn.peer;
+            onlinePlayers[idx].online = true;
+            state.players[idx].peerId = conn.peer;
+            state.players[idx].online = true;
+            conn.playerIndex = idx;
+            
+            log(`🔌 玩家 <b>${state.players[idx].name}</b> 已連入槽位 ${idx + 1}。`, state.players[idx].color);
+            syncLobbyData();
+          } else {
+            conn.send({ type: 'ROOM_FULL' });
+          }
+          return;
+        }
+        
         if (onlinePlayers.length >= selPlayers) {
           conn.send({ type: 'ROOM_FULL' });
           return;
@@ -3072,7 +3799,8 @@ function hostOnlineRoom() {
         onlinePlayers.push({
           peerId: conn.peer,
           name: data.name,
-          icon: data.icon
+          icon: data.icon,
+          online: true
         });
         
         // 動態調整人數上限
@@ -3091,6 +3819,38 @@ function hostOnlineRoom() {
         // 廣播最新大廳連線狀態給所有人
         syncLobbyData();
       } 
+      else if (data.type === 'RECONNECT_ROOM') {
+        if (!state) {
+          conn.send({ type: 'RECONNECT_FAILED', reason: '遊戲尚未啟動' });
+          return;
+        }
+        
+        const idx = data.playerIndex;
+        if (idx === undefined || idx < 0 || idx >= state.players.length) {
+          conn.send({ type: 'RECONNECT_FAILED', reason: '無效的玩家席位' });
+          return;
+        }
+        
+        state.players[idx].peerId = conn.peer;
+        state.players[idx].online = true;
+        
+        guestConnections = guestConnections.filter(c => c.playerIndex !== idx);
+        conn.playerIndex = idx;
+        guestConnections.push(conn);
+        
+        conn.send({
+          type: 'RECONNECT_SUCCESS',
+          config,
+          state,
+          playerIndex: idx
+        });
+        
+        log(`🔌 玩家 <b>${state.players[idx].name}</b> 已重新連回戰局。`, state.players[idx].color);
+        
+        syncState();
+        renderAll();
+        checkTurnTransition();
+      }
       else if (data.type === 'LOBBY_UPDATE_REQUEST') {
         const idx = onlinePlayers.findIndex(p => p.peerId === conn.peer);
         if (idx !== -1) {
@@ -3115,13 +3875,40 @@ function hostOnlineRoom() {
     });
     
     conn.on('close', () => {
-      // 移除斷線的房客
       guestConnections = guestConnections.filter(c => c.peer !== conn.peer);
-      onlinePlayers = onlinePlayers.filter(p => p.peerId !== conn.peer);
-      selPlayers = Math.max(2, onlinePlayers.length);
-      buildPcount();
-      buildNameInputs();
-      syncLobbyData();
+      if (state && !isLoadedGame) {
+        // 遊戲進行中：將該玩家設為離線
+        const idx = state.players.findIndex(p => p.peerId === conn.peer);
+        if (idx !== -1) {
+          state.players[idx].online = false;
+          log(`🔴 玩家 <b>${state.players[idx].name}</b> 斷線，已啟用自動託管。`, '#f87171');
+          
+          if (idx === state.current && peerRole === 'host') {
+            handleOfflineActivePlayer(idx);
+          } else {
+            syncState();
+            renderAll();
+          }
+        }
+      } else if (isLoadedGame) {
+        // 載入存檔大廳中：將對應槽位標為離線
+        const idx = onlinePlayers.findIndex(p => p.peerId === conn.peer);
+        if (idx !== -1) {
+          onlinePlayers[idx].online = false;
+          onlinePlayers[idx].peerId = null;
+          state.players[idx].online = false;
+          state.players[idx].peerId = null;
+          updateOnlineLobbyUI();
+          syncLobbyData();
+        }
+      } else {
+        // 一般大廳階段：直接移除
+        onlinePlayers = onlinePlayers.filter(p => p.peerId !== conn.peer);
+        selPlayers = Math.max(2, onlinePlayers.length);
+        buildPcount();
+        buildNameInputs();
+        syncLobbyData();
+      }
     });
   });
   
@@ -3158,8 +3945,9 @@ function updateOnlineLobbyUI() {
   
   container.innerHTML = onlinePlayers.map((p, idx) => {
     const isHost = idx === 0;
+    const status = isHost || p.online ? '🟢' : '🔴 離線';
     return `<span class="chip ${isHost ? 'border-[#34d399] text-[#34d399]' : 'border-[#60a5fa] text-[#60a5fa]'} flex items-center gap-1">
-      <span>${isHost ? '🔑' : '👤'}</span>
+      <span>${status}</span>
       <span>席位 ${idx + 1}：${p.icon} ${p.name}</span>
     </span>`;
   }).join('');
@@ -3182,12 +3970,12 @@ function joinOnlineRoom() {
   }
   peer = new Peer();
   peer.on('open', id => {
-    connToHost = peer.connect(targetId);
+    connToHost = peer.connect(targetId, { reliable: true });
     
     connToHost.on('open', () => {
       // 向房主傳送加入申請 (包含我自訂的名稱與 Icon)
       connToHost.send({
-        type: 'JOIN',
+        type: 'JOIN_ROOM',
         name: $('name0').value,
         icon: $('icon0').value
       });
@@ -3217,10 +4005,20 @@ function joinOnlineRoom() {
         config = data.config;
         state = data.state;
         
-        // 訪客端也需要初始化地圖資料結構
         buildMap();
         
-        // 進入遊戲板塊
+        // 紀錄房客 Session
+        const myIdx = state.players.findIndex(p => peer && p.peerId === peer.id);
+        if (myIdx !== -1) {
+          localStorage.setItem('dc_monopoly_active_session', JSON.stringify({
+            roomCode: targetId,
+            role: 'guest',
+            playerIndex: myIdx,
+            name: state.players[myIdx].name,
+            icon: state.players[myIdx].icon
+          }));
+        }
+        
         $('setupScreen').style.display = 'none';
         $('game').style.display = 'block';
         $('game').classList.remove('hidden');
@@ -3234,7 +4032,6 @@ function joinOnlineRoom() {
         checkTurnTransition();
       }
       else if (data.type === 'STATE_SYNC') {
-        // 接獲 Host 廣播的最新的遊戲 state
         if (state && data.state && data.state.inflationCount > state.inflationCount) {
           showInflationAlert();
         }
@@ -3242,10 +4039,40 @@ function joinOnlineRoom() {
         renderAll();
         checkTurnTransition();
       }
+      else if (data.type === 'RECONNECT_SUCCESS') {
+        config = data.config;
+        state = data.state;
+        
+        buildMap();
+        $('setupScreen').style.display = 'none';
+        $('game').style.display = 'block';
+        $('game').classList.remove('hidden');
+        
+        buildMapDOM();
+        renderAll();
+        recenter(true);
+        log('🔌 成功連回房主，同步最新戰局中。', 'var(--gold)');
+        
+        localStorage.setItem('dc_monopoly_active_session', JSON.stringify({
+          roomCode: connToHost.peer,
+          role: 'guest',
+          playerIndex: data.playerIndex,
+          name: state.players[data.playerIndex].name,
+          icon: state.players[data.playerIndex].icon
+        }));
+        
+        lastActiveTurnIndex = -1;
+        checkTurnTransition();
+      }
+      else if (data.type === 'RECONNECT_FAILED') {
+        alertModal('重連失敗', `無法重新連回房間：${data.reason}`);
+        localStorage.removeItem('dc_monopoly_active_session');
+        $('reconnectNotifyBox').style.display = 'none';
+      }
     });
     
     connToHost.on('close', () => {
-      alertModal('連線中斷', '房主已關閉房間或連線異常中斷。');
+      alertModal('連線中斷', '與房主連線中斷，正在重新整理網頁以嘗試重連...');
       setTimeout(() => location.reload(), 2000);
     });
   });
@@ -3259,15 +4086,35 @@ window.joinOnlineRoom = joinOnlineRoom;
 
 /* 各自行動後，同步最新 state 物件給全場 */
 function syncState() {
+  // 自動存檔到本地快取
+  if (state) {
+    localStorage.setItem('dc_monopoly_autosave', JSON.stringify({
+      timestamp: Date.now(),
+      config,
+      state,
+      playMode
+    }));
+  }
+
   if (playMode === 'online') {
+    // 同步更新連線 Session
+    const myIdx = state.players.findIndex(p => peer && p.peerId === peer.id);
+    if (myIdx !== -1) {
+      localStorage.setItem('dc_monopoly_active_session', JSON.stringify({
+        roomCode: peerRole === 'host' ? peer.id : connToHost.peer,
+        role: peerRole,
+        playerIndex: myIdx,
+        name: state.players[myIdx].name,
+        icon: state.players[myIdx].icon
+      }));
+    }
+
     if (peerRole === 'host') {
-      // 房主直接廣播給所有房客
       broadcastData({
         type: 'STATE_SYNC',
         state
       });
     } else {
-      // 房客向房主發送狀態同步請求
       if (connToHost && connToHost.open) {
         connToHost.send({
           type: 'STATE_SYNC_REQUEST',
@@ -3281,3 +4128,546 @@ function syncState() {
 /* =========================================================
    全域連線輔助與功能補全
 ========================================================= */
+function stockPrice(tk) {
+  const s = state.stocks.find(x => x.ticker === tk);
+  return s ? s.price : 0;
+}
+
+function moveStock(s, factor) {
+  const hi = Math.round(s.ref * (1 + STOCK_LIMIT));
+  const lo = Math.max(1, Math.round(s.ref * (1 - STOCK_LIMIT)));
+  let np = Math.round(s.price * factor);
+  if (np > hi) {
+    np = hi;
+    s.limit = 1;
+  } else if (np < lo) {
+    np = lo;
+    s.limit = -1;
+  } else {
+    s.limit = 0;
+  }
+  s.price = Math.max(1, np);
+  return s.limit;
+}
+
+function gameOver() {
+  stopTimer();
+  clearActiveSession();
+  const ranking = [...state.players].sort((a, b) => netWorth(b) - netWorth(a));
+  const winner = alivePlayers()[0] || ranking[0];
+  const rows = ranking.map((p, k) => `
+    <div class="flex items-center justify-between card p-2 bg-[#1a2233] border border-[#26314a]">
+      <div class="flex items-center gap-2">
+        <span class="display font-bold text-[#f5c451]">#${k + 1}</span>
+        <span class="pawn text-xs" style="border-color:${p.color}">${p.icon}</span>
+        <span>${p.name}</span>
+        ${p.alive ? '' : '<span class="chip border-[#f87171] text-[#f87171]">破產</span>'}
+      </div>
+      <span class="mono text-[#f5c451]">$${fmt(netWorth(p))}</span>
+    </div>
+  `).join('');
+  
+  $('modalBox').style.maxWidth = '460px';
+  $('modalBox').innerHTML = `
+    <div class="display text-2xl font-black mb-1 text-[#f5c451] text-center">🏆 遊戲結束</div>
+    <div class="text-sm mb-3 text-center">最終贏家：<b style="color:${winner.color}">${winner.name}</b></div>
+    <div class="space-y-2 mb-4 max-h-[300px] overflow-y-auto scroll">${rows}</div>
+    <button class="btn btn-gold w-full py-3 font-bold" onclick="location.reload()">再玩一局 ↻</button>
+  `;
+  $('modal').style.display = 'flex';
+  modalResolver = null;
+}
+
+/* =========================================================
+   存檔與載入管理邏輯 (Save/Load & Reconnection Logic)
+========================================================= */
+let isLoadedGame = false;
+
+// 儲存至本地瀏覽器槽位
+function saveGameToLocalSlot(slot) {
+  if (!state) return;
+  try {
+    const saveData = {
+      timestamp: Date.now(),
+      config: config,
+      state: state,
+      playMode: playMode
+    };
+    localStorage.setItem('dc_monopoly_save_slot_' + slot, JSON.stringify(saveData));
+    updateSaveSlotsUI();
+    alertModal('💾 存檔成功', `遊戲戰局已成功儲存至「本地存檔槽 ${slot}」！`);
+  } catch (e) {
+    console.error("Save slot failed:", e);
+    alertModal('💾 存檔失敗', '瀏覽器空間不足，或發生未知錯誤。');
+  }
+}
+window.saveGameToLocalSlot = saveGameToLocalSlot;
+
+// 開啟存檔視窗
+function openSaveGameModal() {
+  if (playMode === 'online' && peerRole !== 'host') {
+    alertModal('權限不足', '只有房主才能儲存線上戰局。');
+    return;
+  }
+  updateSaveSlotsUI();
+  $('savePanel').style.display = 'flex';
+}
+window.openSaveGameModal = openSaveGameModal;
+
+// 關閉存檔視窗
+function closeSaveGameModal() {
+  $('savePanel').style.display = 'none';
+}
+window.closeSaveGameModal = closeSaveGameModal;
+
+// 更新存檔槽顯示 UI
+function updateSaveSlotsUI() {
+  for (let slot = 1; slot <= 3; slot++) {
+    const key = 'dc_monopoly_save_slot_' + slot;
+    const dataStr = localStorage.getItem(key);
+    const infoEl = $('saveSlotInfo' + slot);
+    const loadSelectOption = document.querySelector(`#loadSaveSlotSelect option[value="${slot}"]`);
+    
+    if (dataStr) {
+      try {
+        const data = JSON.parse(dataStr);
+        const dateStr = new Date(data.timestamp).toLocaleString();
+        const modeText = data.playMode === 'online' ? '🌐 線上' : '🖥️ 單機';
+        const pCount = data.state.players.length;
+        const round = data.state.round;
+        const text = `${modeText} · 輪數: ${round} · 玩家: ${pCount}人 · (${dateStr})`;
+        
+        if (infoEl) infoEl.textContent = text;
+        if (loadSelectOption) loadSelectOption.textContent = `本地快速存檔 ${slot} (${text})`;
+      } catch (e) {
+        if (infoEl) infoEl.textContent = '存檔損毀';
+        if (loadSelectOption) loadSelectOption.textContent = `本地快速存檔 ${slot} (損毀)`;
+      }
+    } else {
+      if (infoEl) infoEl.textContent = '無存檔資料';
+      if (loadSelectOption) loadSelectOption.textContent = `本地快速存檔 ${slot} (空)`;
+    }
+  }
+}
+window.updateSaveSlotsUI = updateSaveSlotsUI;
+
+// 下載 JSON 備份檔案
+function exportGameToJson() {
+  if (!state) return;
+  try {
+    const saveData = {
+      timestamp: Date.now(),
+      config: config,
+      state: state,
+      playMode: playMode
+    };
+    const blob = new Blob([JSON.stringify(saveData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dc_monopoly_save_${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    log('💾 戰局已匯出為 JSON 備份檔案並開始下載。', 'var(--gold)');
+  } catch (e) {
+    console.error("Export failed:", e);
+    alertModal('匯出失敗', '無法產生備份檔案。');
+  }
+}
+window.exportGameToJson = exportGameToJson;
+
+// 從本地槽位讀取按鈕
+async function loadGameFromLocalSlotBtn() {
+  const slot = $('loadSaveSlotSelect').value;
+  const key = 'dc_monopoly_save_slot_' + slot;
+  const dataStr = localStorage.getItem(key);
+  if (!dataStr) {
+    alertModal('載入失敗', '該槽位沒有任何存檔資料。');
+    return;
+  }
+  
+  const ans = await showChoice('載入戰局', '載入存檔將覆蓋目前的設定與大廳，是否確定？', [
+    { label: '確認載入', value: true, cls: 'btn-gold' },
+    { label: '取消', value: false, cls: 'btn-ghost' }
+  ]);
+  if (ans) {
+    try {
+      const data = JSON.parse(dataStr);
+      restoreGame(data);
+    } catch (e) {
+      alertModal('載入失敗', '存檔解析錯誤或檔案已損毀。');
+    }
+  }
+}
+window.loadGameFromLocalSlotBtn = loadGameFromLocalSlotBtn;
+
+// 從 JSON 匯入檔案讀取按鈕
+function importGameFromJsonBtn(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.state || !data.config || !data.playMode) {
+        alertModal('匯入失敗', '無效的存檔結構，缺少必要的遊戲數據。');
+        return;
+      }
+      
+      const ans = await showChoice('匯入存檔', '確認匯入此 JSON 備份檔案並載入戰局？', [
+        { label: '確認匯入', value: true, cls: 'btn-gold' },
+        { label: '取消', value: false, cls: 'btn-ghost' }
+      ]);
+      if (ans) {
+        restoreGame(data);
+      }
+    } catch (err) {
+      alertModal('匯入失敗', 'JSON 存檔解析出錯，請確認檔案格式是否正確。');
+    }
+    $('importSaveFile').value = '';
+  };
+  reader.readAsText(file);
+}
+window.importGameFromJsonBtn = importGameFromJsonBtn;
+
+// 恢復戰局邏輯
+function restoreGame(data) {
+  config = data.config;
+  state = data.state;
+  playMode = data.playMode;
+  isLoadedGame = true;
+  
+  if (playMode === 'local') {
+    startGame();
+  } else {
+    peerRole = 'host';
+    onlinePlayers = state.players.map(p => ({
+      peerId: p.id === 0 ? null : p.peerId,
+      name: p.name,
+      icon: p.icon,
+      online: p.id === 0
+    }));
+    
+    selPlayers = onlinePlayers.length;
+    
+    buildPcount();
+    buildNameInputs();
+    
+    for (let i = 0; i < onlinePlayers.length; i++) {
+      const nameEl = $('name' + i);
+      const iconEl = $('icon' + i);
+      if (nameEl) nameEl.value = onlinePlayers[i].name;
+      if (iconEl) iconEl.value = onlinePlayers[i].icon;
+    }
+    
+    setPlayMode('online');
+    $('btnStartGame').textContent = '恢復戰局 ▸';
+    
+    alertModal('存檔已載入', '線上戰局存檔已載入！請「建立多人房間」以發布房間代碼，並請其他玩家重新加入綠燈後，點擊「恢復戰局」重新開局。');
+  }
+}
+
+// 房客點選「連回戰局」按鈕
+function autoReconnectBtn() {
+  const sessionStr = localStorage.getItem('dc_monopoly_active_session');
+  if (!sessionStr) return;
+  
+  try {
+    const session = JSON.parse(sessionStr);
+    playMode = 'online';
+    peerRole = 'guest';
+    
+    $('onlinePlayerList').innerHTML = '<span class="chip border-[#26314a]">正在連回房主房間...</span>';
+    $('reconnectNotifyBox').style.display = 'none';
+    
+    if (peer) {
+      try { peer.destroy(); } catch(e) {}
+      peer = null;
+    }
+    
+    peer = new Peer();
+    peer.on('open', id => {
+      connToHost = peer.connect(session.roomCode, { reliable: true });
+      
+      connToHost.on('open', () => {
+        connToHost.send({
+          type: 'RECONNECT_ROOM',
+          playerIndex: session.playerIndex,
+          name: session.name,
+          icon: session.icon
+        });
+      });
+      
+      connToHost.on('data', data => {
+        if (data.type === 'LOBBY_UPDATE') {
+          onlinePlayers = data.players;
+          selPlayers = data.selPlayers;
+          buildPcount();
+          buildNameInputs();
+          
+          for (let i = 0; i < onlinePlayers.length; i++) {
+            const nameEl = $('name' + i);
+            const iconEl = $('icon' + i);
+            if (nameEl) nameEl.value = onlinePlayers[i].name;
+            if (iconEl) iconEl.value = onlinePlayers[i].icon;
+          }
+          updateOnlineLobbyUI();
+        }
+        else if (data.type === 'ROOM_FULL') {
+          alertModal('重連失敗', '房間人數已滿。');
+          peer.destroy();
+        }
+        else if (data.type === 'GAME_START') {
+          config = data.config;
+          state = data.state;
+          
+          buildMap();
+          $('setupScreen').style.display = 'none';
+          $('game').style.display = 'block';
+          $('game').classList.remove('hidden');
+          
+          buildMapDOM();
+          renderAll();
+          recenter(true);
+          log('🔌 房主已恢復戰局！線上連線同步成功！', 'var(--gold)');
+          
+          lastActiveTurnIndex = -1;
+          checkTurnTransition();
+        }
+        else if (data.type === 'STATE_SYNC') {
+          if (state && data.state && data.state.inflationCount > state.inflationCount) {
+            showInflationAlert();
+          }
+          state = data.state;
+          renderAll();
+          checkTurnTransition();
+        }
+        else if (data.type === 'RECONNECT_SUCCESS') {
+          config = data.config;
+          state = data.state;
+          
+          buildMap();
+          $('setupScreen').style.display = 'none';
+          $('game').style.display = 'block';
+          $('game').classList.remove('hidden');
+          
+          buildMapDOM();
+          renderAll();
+          recenter(true);
+          log('🔌 成功重新連回房主，同步最新戰局中。', 'var(--gold)');
+          
+          localStorage.setItem('dc_monopoly_active_session', JSON.stringify({
+            roomCode: connToHost.peer,
+            role: 'guest',
+            playerIndex: data.playerIndex,
+            name: state.players[data.playerIndex].name,
+            icon: state.players[data.playerIndex].icon
+          }));
+          
+          lastActiveTurnIndex = -1;
+          checkTurnTransition();
+        }
+        else if (data.type === 'RECONNECT_FAILED') {
+          alertModal('重連失敗', `無法重新連回房間：${data.reason}`);
+          localStorage.removeItem('dc_monopoly_active_session');
+          $('reconnectNotifyBox').style.display = 'none';
+        }
+      });
+      
+      connToHost.on('close', () => {
+        alertModal('連線中斷', '與房主連線中斷，正在重新整理網頁以嘗試重連...');
+        setTimeout(() => location.reload(), 2000);
+      });
+    });
+    
+    peer.on('error', err => {
+      console.error("Reconnect Peer Error:", err);
+      $('onlinePlayerList').innerHTML = '<span class="chip border-[#f87171] text-[#f87171]">重連失敗，房主可能尚未建立房間</span>';
+      $('reconnectNotifyBox').style.display = 'flex';
+    });
+  } catch (e) {
+    console.error(e);
+  }
+}
+window.autoReconnectBtn = autoReconnectBtn;
+
+// 房主自動重建並載入線上戰局
+function autoRestoreHostSession(session) {
+  const autosaveStr = localStorage.getItem('dc_monopoly_autosave');
+  if (!autosaveStr) return;
+  
+  try {
+    const data = JSON.parse(autosaveStr);
+    config = data.config;
+    state = data.state;
+    playMode = data.playMode;
+    peerRole = 'host';
+    
+    peer = new Peer(session.roomCode);
+    
+    peer.on('open', id => {
+      $('hostRoomCode').textContent = id;
+      
+      $('setupScreen').style.display = 'none';
+      $('game').style.display = 'block';
+      $('game').classList.remove('hidden');
+      
+      buildMap();
+      buildMapDOM();
+      
+      state.players.forEach((p, idx) => {
+        if (idx > 0) p.online = false;
+      });
+      
+      renderAll();
+      recenter(true);
+      
+      log('🔄 偵測到網頁重整，房主已自動重建房間！等待其他玩家重連中...', 'var(--gold)');
+      
+      startTimer();
+    });
+    
+    peer.on('connection', conn => {
+      guestConnections.push(conn);
+      
+      conn.on('data', data => {
+        if (data.type === 'RECONNECT_ROOM') {
+          const idx = data.playerIndex;
+          if (idx === undefined || idx < 0 || idx >= state.players.length) {
+            conn.send({ type: 'RECONNECT_FAILED', reason: '無效的玩家席位' });
+            return;
+          }
+          
+          state.players[idx].peerId = conn.peer;
+          state.players[idx].online = true;
+          
+          guestConnections = guestConnections.filter(c => c.playerIndex !== idx);
+          conn.playerIndex = idx;
+          guestConnections.push(conn);
+          
+          conn.send({
+            type: 'RECONNECT_SUCCESS',
+            config,
+            state,
+            playerIndex: idx
+          });
+          
+          log(`🔌 玩家 <b>${state.players[idx].name}</b> 已重新連回戰局。`, state.players[idx].color);
+          
+          syncState();
+          renderAll();
+          checkTurnTransition();
+        }
+        else if (data.type === 'JOIN_ROOM') {
+          const idx = state.players.findIndex(p => !p.online);
+          if (idx !== -1) {
+            state.players[idx].peerId = conn.peer;
+            state.players[idx].online = true;
+            
+            guestConnections = guestConnections.filter(c => c.playerIndex !== idx);
+            conn.playerIndex = idx;
+            guestConnections.push(conn);
+            
+            conn.send({
+              type: 'RECONNECT_SUCCESS',
+              config,
+              state,
+              playerIndex: idx
+            });
+            
+            log(`🔌 玩家 <b>${state.players[idx].name}</b> 已透過一般加入連回戰局。`, state.players[idx].color);
+            syncState();
+            renderAll();
+            checkTurnTransition();
+          } else {
+            conn.send({ type: 'ROOM_FULL' });
+          }
+        }
+        else if (data.type === 'STATE_SYNC_REQUEST') {
+          if (state && data.state && data.state.inflationCount > state.inflationCount) {
+            showInflationAlert();
+          }
+          state = data.state;
+          broadcastData({
+            type: 'STATE_SYNC',
+            state
+          });
+          renderAll();
+          checkTurnTransition();
+        }
+      });
+      
+      conn.on('close', () => {
+        const idx = state.players.findIndex(p => p.peerId === conn.peer);
+        if (idx !== -1) {
+          state.players[idx].online = false;
+          log(`🔴 玩家 <b>${state.players[idx].name}</b> 斷線，已啟用自動託管。`, '#f87171');
+          
+          if (idx === state.current && peerRole === 'host') {
+            handleOfflineActivePlayer(idx);
+          } else {
+            syncState();
+            renderAll();
+          }
+        }
+        guestConnections = guestConnections.filter(c => c.peer !== conn.peer);
+      });
+    });
+    
+    peer.on('error', err => {
+      console.error("Auto restore Host Peer Error:", err);
+      localStorage.removeItem('dc_monopoly_active_session');
+    });
+    
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// 房主託管斷線玩家的回合
+async function handleOfflineActivePlayer(idx) {
+  state.auto = true;
+  stopTimer();
+  closePanels();
+  
+  const p = state.players[idx];
+  log(`🤖 [系統] 正在為中途斷線的玩家 <b>${p.name}</b> 託管並結束回合...`, '#8a98b3');
+  
+  if (!rolledThisTurn && !busy) {
+    await doRoll();
+  } else if (rolledThisTurn && !busy) {
+    setTimeout(endTurn, 1000);
+  }
+}
+
+// 清除連線 Session 與自動存檔
+function clearActiveSession() {
+  localStorage.removeItem('dc_monopoly_active_session');
+  localStorage.removeItem('dc_monopoly_autosave');
+}
+
+// 初始化加載
+updateSaveSlotsUI();
+
+// 檢查是否具有未結束的線上戰局
+(function() {
+  const sessionStr = localStorage.getItem('dc_monopoly_active_session');
+  if (sessionStr) {
+    try {
+      const session = JSON.parse(sessionStr);
+      if (session && session.roomCode) {
+        if (session.role === 'host') {
+          autoRestoreHostSession(session);
+        } else {
+          $('reconnectRoomCode').textContent = session.roomCode;
+          $('reconnectNotifyBox').style.display = 'flex';
+        }
+      }
+    } catch(e) {
+      console.error("Init session error:", e);
+    }
+  }
+})();
