@@ -336,6 +336,7 @@ function ptOnRect(t, r) {
   if (d < r.h) return { x: r.x + r.w, y: r.y + d };
   d -= r.h;
   if (d < r.w) return { x: r.x + r.w - d, y: r.y + r.h };
+  d -= r.w;
   return { x: r.x, y: r.y + r.h - d };
 }
 
