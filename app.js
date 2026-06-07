@@ -50,11 +50,7 @@ const PROP_NAMES = [
   '夜市攤位', '文創小店', '捷運商圈', '海濱別墅', '科技園區', '金融中心', '觀光飯店', '工業廠房',
   '購物商場', '半導體廠', '私人島嶼', '太空基地', '溫泉會館', '遊艇碼頭', '電競館', '雲端機房',
   '釀酒莊園', '賽車場', '美術館', '摩天輪', '數據中心', '綠能電廠', '時尚精品', '百貨總店',
-  '晶片大樓', '星光劇院', '風力電網', '生技藥廠', '國際自貿區', '深海油田', '賽車賽道', '物流園區',
-  '文創園區', '生鮮超市', '影城影院', '高鐵特區', '生技大樓', '風力發電', '智慧農場', '水產市場',
-  '運動園區', '電子街', '軟體園區', '精品旅館', '免稅商店', '郵輪碼頭', '綠色社區', '算力中心',
-  '太空發射場', '深海鑽探船', '物流總部', '國際展覽館', '影音基地', '元宇宙中心', '自動化廠房', '低軌衛星基地',
-  '文藝復興特區', '大健康醫療', '新能研發中心', '國際會議中心', '金融總部大樓', 'AI晶片研發所', '保稅物流中心', '無人機基地'
+  '晶片大樓', '星光劇院', '風力電網', '生技藥廠', '國際自貿區', '深海油田', '賽車賽道', '物流園區'
 ];
 
 /* 角色 ICON 清單 */
@@ -340,7 +336,6 @@ function ptOnRect(t, r) {
   if (d < r.h) return { x: r.x + r.w, y: r.y + d };
   d -= r.h;
   if (d < r.w) return { x: r.x + r.w - d, y: r.y + r.h };
-  d -= r.w;
   return { x: r.x, y: r.y + r.h - d };
 }
 
@@ -351,9 +346,9 @@ function addEdge(a, b) {
 
 function buildMap() {
   MAP = { nodes: [], adj: {} };
-  // 保持寬廣拉伸的矩形空間，座標長寬翻倍，確保大卡牌間隔均勻不重疊
-  const rect = { x: 4000, y: 4000, w: 67200, h: 44000 };
-  const R = 76;
+  // 保持寬廣拉伸的矩形空間，使大卡牌之間不重疊
+  const rect = { x: 4000, y: 4000, w: 33600, h: 22000 };
+  const R = 38;
   for (let i = 0; i < R; i++) {
     const pt = ptOnRect(i / R, rect);
     MAP.nodes.push({ id: i, x: pt.x, y: pt.y, kind: 'ring', ringNext: (i + 1) % R });
@@ -361,10 +356,10 @@ function buildMap() {
   for (let i = 0; i < R; i++) addEdge(i, (i + 1) % R);
 
   const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
-  // 中央賭場 (ID 80)
-  MAP.nodes.push({ id: 80, x: cx, y: cy, kind: 'bridge' });
+  // 中央賭場 (ID 40)
+  MAP.nodes.push({ id: 40, x: cx, y: cy, kind: 'bridge' });
 
-  let nid = 81; // 新分支節點起始 id
+  let nid = 41; // 新分支節點起始 id
   // 直線路鏈：a —(count 個中繼節點)— b
   function chain(aId, bId, count, kind) {
     const a = nodeById(aId), b = nodeById(bId);
@@ -405,26 +400,26 @@ function buildMap() {
     return ids;
   }
 
-  // 十字路網（皆經過中央捷徑 80），每個 3 個中繼節點
-  const brN = chain(12, 80, 3, 'bridge');
-  const brS = chain(80, 50, 3, 'bridge');
-  const brW = chain(68, 80, 3, 'bridge');
-  const brE = chain(80, 30, 3, 'bridge');
+  // 十字路網（皆經過中央捷徑 40），每個 3 個中繼節點
+  const brN = chain(6, 40, 3, 'bridge');
+  const brS = chain(40, 25, 3, 'bridge');
+  const brW = chain(34, 40, 3, 'bridge');
+  const brE = chain(40, 15, 3, 'bridge');
 
-  // 四角外圍繞道，沿弧線大幅向外凸出，做為轉運角點旁路 (bulge 值翻倍)
-  const dNE = chainArc(20, 24, 3, 'detour', 45600);
-  const dSE = chainArc(36, 40, 3, 'detour', 45600);
-  const dSW = chainArc(56, 60, 3, 'detour', 45600);
-  const dNW = chainArc(72, 0, 1, 'detour', 36000);
+  // 四角外圍繞道，沿弧線大幅向外凸出，做為轉運角點旁路
+  const dNE = chainArc(10, 12, 3, 'detour', 22800);
+  const dSE = chainArc(18, 20, 3, 'detour', 22800);
+  const dSW = chainArc(28, 30, 3, 'detour', 22800);
+  const dNW = chainArc(36, 0, 1, 'detour', 18000);
 
-  // 外環特殊格 (索引全部翻倍以擴充棋盤)
+  // 外環特殊格
   const spec = {
-    0: 'start', 4: 'fate', 8: 'news', 12: 'plaza', 20: 'plaza',
-    22: 'bank', 24: 'plaza', 26: 'jail', 30: 'plaza', 34: 'fate',
-    36: 'plaza', 38: 'news', 40: 'plaza', 50: 'plaza',
-    54: 'stock', 56: 'plaza', 60: 'plaza', 64: 'shop', 68: 'plaza', 72: 'plaza'
+    0: 'start', 2: 'fate', 4: 'news', 6: 'plaza', 10: 'plaza',
+    11: 'bank', 12: 'plaza', 13: 'jail', 15: 'plaza', 17: 'fate',
+    18: 'plaza', 19: 'news', 20: 'plaza', 25: 'plaza',
+    27: 'stock', 28: 'plaza', 30: 'plaza', 32: 'shop', 34: 'plaza', 36: 'plaza'
   };
-  const forks = new Set([12, 20, 24, 30, 36, 40, 50, 56, 60, 68, 72]);
+  const forks = new Set([6, 10, 15, 18, 25, 28, 34, 36]);
 
   // 分支（橋／繞道）節點輪流給予事件/商店/股市型別，減少一半功能格，換成一般地產
   const branchCycle = ['fate', 'property', 'news', 'property', 'fate', 'shop', 'news', 'stock'];
@@ -437,21 +432,20 @@ function buildMap() {
       n.name = { fate: '命運', news: '新聞快報', shop: '道具商店', stock: '證券交易所' }[t];
     }
   });
-  // 賭場型別 (中央節點 ID 80)
-  const casino = nodeById(80);
+  // 賭場型別 (中央節點 ID 40)
+  const casino = nodeById(40);
   casino.type = 'casino';
   casino.name = '拉斯維加斯賭場';
 
-  // 八大社區分組，總地產規模擴大兩倍，單組容納個數按比例調增，維持 contiguous 分佈
   const GROUPS = [
-    { name: '老城商圈', color: '#a16207', size: 7 },
-    { name: '濱海特區', color: '#0e7490', size: 7 },
-    { name: '科技走廊', color: '#1d4ed8', size: 9 },
-    { name: '金融大道', color: '#b45309', size: 7 },
-    { name: '工業重鎮', color: '#4d7c0f', size: 7 },
-    { name: '觀光勝地', color: '#be185d', size: 7 },
-    { name: '頂級地段', color: '#7c3aed', size: 9 },
-    { name: '新興開發', color: '#0f766e', size: 7 },
+    { name: '老城商圈', color: '#a16207', size: 3 },
+    { name: '濱海特區', color: '#0e7490', size: 3 },
+    { name: '科技走廊', color: '#1d4ed8', size: 4 },
+    { name: '金融大道', color: '#b45309', size: 3 },
+    { name: '工業重鎮', color: '#4d7c0f', size: 3 },
+    { name: '觀光勝地', color: '#be185d', size: 3 },
+    { name: '頂級地段', color: '#7c3aed', size: 4 },
+    { name: '新興開發', color: '#0f766e', size: 3 },
   ];
 
   const SPECIAL_NAMES = [
@@ -462,11 +456,7 @@ function buildMap() {
     { name: '特許重工廠區', type: 'cash' },
     { name: '特許星鏈衛星', type: 'points' },
     { name: '特許高鐵軌道', type: 'cash' },
-    { name: '特許元宇宙中心', type: 'points' },
-    { name: '特許智能算力港', type: 'cash' },
-    { name: '特許基因庫中心', type: 'points' },
-    { name: '特許低軌太空站', type: 'cash' },
-    { name: '特許超導電網', type: 'points' }
+    { name: '特許元宇宙中心', type: 'points' }
   ];
   let specIdx = 0;
 
@@ -681,7 +671,8 @@ function startGame() {
     gainStart: Math.max(0, parseInt($('gainStartPoints').value) || 25),
     gainEvent: Math.max(0, parseInt($('gainEventPoints').value) || 15),
     stockLimit: $('cfgStockLimit') ? $('cfgStockLimit').checked : false,
-    stockShares: Math.max(100, parseInt($('cfgStockShares') ? $('cfgStockShares').value : '10000') || 10000)
+    stockShares: Math.max(100, parseInt($('cfgStockShares') ? $('cfgStockShares').value : '10000') || 10000),
+    startDice: Math.min(3, Math.max(1, parseInt($('cfgStartDice') ? $('cfgStartDice').value : '1') || 1))
   };
   
   buildMap();
@@ -703,7 +694,7 @@ function startGame() {
       savings: config.save,
       points: config.points,
       node: 0,
-      from: 75, 
+      from: 37, 
       stocks: {},
       pledged: {},
       tradeLog: [], // 股票交易紀錄
@@ -713,7 +704,7 @@ function startGame() {
       tsunamiTurns: 0,
       skip: false,
       skipTurns: 0,
-      diceCount: 1,
+      diceCount: config.startDice || 1,
       diceCountTurns: 0,
       plazaChoice: null
     });
@@ -1517,7 +1508,7 @@ function alertModal(t, h) {
    回合流程
 ========================================================= */
 async function beginTurn() {
-  let p = curPlayer();
+  const p = curPlayer();
   if (!p.alive) return endTurn();
   
   // 1. 離線玩家託管處理 (線上模式且我們是房主)
@@ -1543,7 +1534,6 @@ async function beginTurn() {
     
     setTimeout(async () => {
       rolledThisTurn = true;
-      p = state.players[p.id];
       const dc = p.diceCount || 1;
       let steps = 0;
       for (let d = 0; d < dc; d++) steps += rnd(1, 6);
@@ -1553,11 +1543,8 @@ async function beginTurn() {
       await animateDie(steps);
       state.turnActions.push(`🎲 (自動託管) 擲出 ${steps} 點`);
       
-      p = state.players[p.id];
       await walk(p, steps);
-      p = state.players[p.id];
       await resolveNode(p);
-      p = state.players[p.id];
       if (p.cash < 0) await settleNegative(p);
       
       busy = false;
@@ -1622,35 +1609,30 @@ async function beginTurn() {
     }
   }
   
+  // 質押斷頭檢查
   if (playMode === 'local' || (peer && p.peerId === peer.id)) {
-    p = state.players[p.id];
     await checkMarginCall(p);
   }
   
-  p = state.players[p.id];
   // 窮神扣錢
   if (hasDeity(p, 'poor')) {
     const drain = inf(p.deity.big ? 1500 : 400);
     p.cash -= drain;
     log(`🪙 <b>${p.name}</b> 被窮神財氣糾纏，損失現金 $${fmt(drain)}。`, DEITIES.poor.color);
     if (p.cash < 0 && (playMode === 'local' || (peer && p.peerId === peer.id))) {
-      p = state.players[p.id];
       await settleNegative(p);
     }
   }
   
-  p = state.players[p.id];
   renderAll();
   
   if (p.skip) {
     p.skip = false;
     $('centerMsg').textContent = `${p.name} 本回合暫停中`;
     await alertModal('暫停回合', `<b>${p.name}</b> 目前正在監獄/休息，本回合必須暫停一次。`);
-    p = state.players[p.id];
     return endTurn();
   }
   
-  p = state.players[p.id];
   if (!p.alive) return endTurn();
   
   if (playMode === 'local' || (peer && p.peerId === peer.id)) {
@@ -1776,13 +1758,13 @@ async function walk(p, steps) {
       updateMap();
       break;
     }
+    
     if (!state.auto) {
       updateMap();
       recenter();
       await sleep(140);
     }
   }
-  p = state.players[p.id];
   p.from = from;
   
   if (hasDeity(p, 'fortune') && p.deity.big) {
@@ -2050,70 +2032,43 @@ function renderCasinoActing() {
   const cardsBlock = `<div class="flex justify-center gap-4 my-4">${cardHTML(cl.first, cl.phase === 'reveal')}${cl.phase === 'reveal' ? cardHTML(cl.second) : ''}</div>`;
   let controls;
   if (cl.phase === 'bet') {
-    if (cl.rounds === 0) {
-      const defaultBetVal = Math.min(1000, Math.max(1, p.cash));
-      controls = `
-        <div class="mb-4 space-y-3">
-          <div>
-            <div class="text-[#8a98b3] text-xs font-bold mb-1.5">🔁 設定本次賭博局數：</div>
-            <input id="casinoMaxRounds" type="number" min="1" max="100" value="10" class="seg text-sm font-bold mono w-full" placeholder="請輸入局數">
-          </div>
-          <div>
-            <div class="text-[#8a98b3] text-xs font-bold mb-1.5 flex justify-between">
-              <span>💰 下注種類與每局金額：</span>
-              <span class="text-[#f5c451]">首局設定後將鎖定沿用</span>
-            </div>
-            <div class="flex gap-2">
-              <select id="casinoCurrency" class="seg text-sm font-bold" style="width: 120px;" onchange="(function(){
-                var b=document.getElementById('casinoBet'); 
-                if(b) b.value = this.value==='cash'? Math.min(1000, ${p.cash}) : Math.min(10, ${p.points});
-              }).call(this)">
-                <option value="cash">💵 現金</option>
-                <option value="points">🔵 點數</option>
-              </select>
-              <input id="casinoBet" type="number" min="1" value="${defaultBetVal}" class="seg text-sm font-bold mono" style="flex:1" placeholder="請輸入單局賭金">
-              <button class="btn btn-red px-4 text-xs font-bold" onclick="casinoQuickBet('all')">ALL IN</button>
-            </div>
-            <div class="flex gap-2 mt-2">
-              <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(100)">+100</button>
-              <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(1000)">+1,000</button>
-              <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(10000)">+10,000</button>
-              <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(10)">+10 PP</button>
-              <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(50)">+50 PP</button>
-            </div>
-          </div>
+    const defaultBetVal = Math.min(1000, Math.max(1, p.cash));
+    controls = `
+      <div class="mb-4">
+        <div class="text-[#8a98b3] text-xs font-bold mb-1.5 flex justify-between">
+          <span>💰 下注種類與金額：</span>
+          <span id="maxBetInfo" class="text-[#f5c451]">已下注 ${cl.rounds} / 10 次（最多 10 次）</span>
         </div>
         <div class="flex gap-2">
-          <button class="btn btn-gold py-2.5 text-sm" style="flex:1" onclick="casinoAct('high')">🔼 更大</button>
-          <button class="btn btn-gold py-2.5 text-sm" style="flex:1" onclick="casinoAct('low')">🔽 更小</button>
-          <button class="btn btn-ghost py-2.5 px-4 text-sm" onclick="casinoAct('end')">🚪 離開賭場</button>
-        </div>`;
-    } else {
-      controls = `
-        <div class="mb-4 p-3 border border-[#26314a]/60 rounded bg-[#121826]/40 text-xs text-[#8a98b3] space-y-1.5">
-          <div class="flex justify-between">
-            <span>下注金額 (已鎖定)：</span>
-            <span class="font-bold text-white mono">${cl.betCurrency === 'cash' ? '$' + fmt(cl.betAmount) : cl.betAmount + ' PP'} (${cl.betCurrency === 'cash' ? '現金' : '點數'})</span>
-          </div>
-          <div class="flex justify-between">
-            <span>玩牌進度：</span>
-            <span class="font-bold text-[#f5c451] mono">第 ${cl.rounds + 1} / ${cl.maxRounds} 局</span>
-          </div>
+          <select id="casinoCurrency" class="seg text-sm font-bold" style="width: 120px;" onchange="(function(){
+            var b=document.getElementById('casinoBet'); 
+            if(b) b.value = this.value==='cash'? Math.min(1000, ${p.cash}) : Math.min(10, ${p.points});
+          }).call(this)">
+            <option value="cash">💵 現金</option>
+            <option value="points">🔵 點數</option>
+          </select>
+          <input id="casinoBet" type="number" min="1" value="${defaultBetVal}" class="seg text-sm font-bold mono" style="flex:1" placeholder="請輸入金額">
+          <button class="btn btn-red px-4 text-xs font-bold" onclick="casinoQuickBet('all')">ALL IN</button>
         </div>
-        <div class="flex gap-2">
-          <button class="btn btn-gold py-2.5 text-sm" style="flex:1" onclick="casinoAct('high')">🔼 更大</button>
-          <button class="btn btn-gold py-2.5 text-sm" style="flex:1" onclick="casinoAct('low')">🔽 更小</button>
-          <button class="btn btn-ghost py-2.5 px-4 text-sm" onclick="casinoAct('end')">🚪 結束賭局</button>
-        </div>`;
-    }
+        <div class="flex gap-2 mt-2">
+          <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(100)">+100</button>
+          <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(1000)">+1,000</button>
+          <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(10000)">+10,000</button>
+          <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(10)">+10 PP</button>
+          <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(50)">+50 PP</button>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn btn-gold py-2.5 text-sm" style="flex:1" onclick="casinoAct('high')">🔼 更大</button>
+        <button class="btn btn-gold py-2.5 text-sm" style="flex:1" onclick="casinoAct('low')">🔽 更小</button>
+        <button class="btn btn-ghost py-2.5 px-4 text-sm" onclick="casinoAct('end')">🚪 結束賭局</button>
+      </div>`;
   } else {
-    const bal = cl.betCurrency === 'cash' ? p.cash : p.points;
-    const canContinue = bal >= cl.betAmount;
-    const limitReached = cl.rounds >= cl.maxRounds;
+    const limitReached = cl.rounds >= 10;
     controls = `
       <div class="flex gap-2">
-        <button class="btn btn-gold py-2.5 text-sm" style="flex:1" ${(!canContinue || limitReached) ? 'disabled' : ''} onclick="casinoAct('again')">
-          ${limitReached ? `🚫 已達 ${cl.maxRounds} 局上限` : (!canContinue ? '🚫 餘額不足以續賭' : '🔁 再賭一局')}
+        <button class="btn btn-gold py-2.5 text-sm" style="flex:1" ${limitReached ? 'disabled' : ''} onclick="casinoAct('again')">
+          ${limitReached ? '🚫 已達 10 局上限' : '🔁 再賭一局'}
         </button>
         <button class="btn btn-ghost py-2.5 text-sm" style="flex:1" onclick="casinoAct('end')">🚪 結束賭局</button>
       </div>`;
@@ -2126,7 +2081,7 @@ function renderCasinoActing() {
     <div class="flex justify-center gap-4 text-xs mb-3">
       <span class="text-[#8a98b3]">💵 現金：<b class="text-[#f5c451] mono">$${fmt(p.cash)}</b></span>
       <span class="text-[#8a98b3]">🔵 點數：<b class="text-[#60a5fa] mono">${p.points} PP</b></span>
-      <span class="text-[#8a98b3]">已玩 <b class="text-white">${cl.rounds} / ${cl.maxRounds || 10}</b> 局</span>
+      <span class="text-[#8a98b3]">已玩 <b class="text-white">${cl.rounds} / 10</b> 局</span>
     </div>
     ${cardsBlock}
     ${resultBlock}
@@ -2147,24 +2102,15 @@ function renderCasinoSpectator() {
     resultBlock = `<div class="text-center font-bold mb-3 text-sm" style="color:${color}">${txt}</div>`;
   }
   const cardsBlock = `<div class="flex justify-center gap-4 my-4">${cardHTML(cl.first, cl.phase === 'reveal')}${cl.phase === 'reveal' ? cardHTML(cl.second) : ''}</div>`;
-  let betInfoBlock = '';
-  if (cl.rounds > 0 && cl.betAmount > 0) {
-    betInfoBlock = `
-      <div class="text-center text-xs text-[#8a98b3] mb-2">
-        下注金額：<b class="text-white mono">${cl.betCurrency === 'cash' ? '$' + fmt(cl.betAmount) : cl.betAmount + ' PP'}</b> (${cl.betCurrency === 'cash' ? '現金' : '點數'})
-      </div>
-    `;
-  }
   $('casinoBody').innerHTML = `
     <div class="text-center mb-2">
       <div class="display text-xl font-bold text-[#d97706]">🎰 賭場觀戰中</div>
-      <div class="text-sm mt-1 font-bold mb-1" style="color:${actor ? actor.color : '#fff'}">${actor ? actor.icon + ' ' + actor.name : ''} 正在賭場博弈…</div>
+      <div class="text-sm mt-1 font-bold" style="color:${actor ? actor.color : '#fff'}">${actor ? actor.icon + ' ' + actor.name : ''} 正在賭場博弈…</div>
     </div>
-    ${betInfoBlock}
     <div class="flex justify-center gap-4 text-xs mb-1">
       <span class="text-[#8a98b3]">💵 現金：<b class="text-[#f5c451] mono">$${fmt(cl.cash)}</b></span>
       <span class="text-[#8a98b3]">🔵 點數：<b class="text-[#60a5fa] mono">${cl.points} PP</b></span>
-      <span class="text-[#8a98b3]">已玩 <b class="text-white">${cl.rounds} / ${cl.maxRounds || 10}</b> 局</span>
+      <span class="text-[#8a98b3]">已玩 <b class="text-white">${cl.rounds}</b> 局</span>
     </div>
     ${cardsBlock}
     ${resultBlock}
@@ -2184,30 +2130,14 @@ function updateCasinoView() {
 }
 
 async function runCasino(p) {
-  p = state.players[p.id];
   log(`🎰 <b>${p.name}</b> 進入拉斯維加斯賭場！`, '#d97706');
   state.turnActions.push(`🎰 進入賭場`);
   stopTimer();
   casinoActorBusy = true;
-  state.casinoLive = { 
-    pid: p.id, 
-    name: p.name, 
-    color: p.color, 
-    cash: p.cash, 
-    points: p.points, 
-    first: null, 
-    second: null, 
-    phase: 'bet', 
-    lastResult: null, 
-    rounds: 0,
-    maxRounds: 10,
-    betAmount: 0,
-    betCurrency: 'cash'
-  };
+  state.casinoLive = { pid: p.id, name: p.name, color: p.color, cash: p.cash, points: p.points, first: null, second: null, phase: 'bet', lastResult: null, rounds: 0 };
 
   while (true) {
-    p = state.players[p.id];
-    if (state.casinoLive.rounds >= state.casinoLive.maxRounds) {
+    if (state.casinoLive.rounds >= 10) {
       break;
     }
     const first = dealCard();
@@ -2220,52 +2150,15 @@ async function runCasino(p) {
     renderCasinoActing();
 
     const action = await new Promise(res => { casinoResolver = res; });
-    p = state.players[p.id];
     if (action === 'end') break;
 
-    let cur, bet, maxRounds;
-    if (state.casinoLive.rounds === 0) {
-      cur = ($('casinoCurrency') && $('casinoCurrency').value) || 'cash';
-      bet = parseInt($('casinoBet') ? $('casinoBet').value : '0') || 0;
-      maxRounds = parseInt($('casinoMaxRounds') ? $('casinoMaxRounds').value : '10') || 10;
-      if (maxRounds < 1) { 
-        await alertModal('設定無效', '請輸入至少 1 次的玩牌局數。'); 
-        p = state.players[p.id];
-        continue; 
-      }
-      if (bet < 1) { 
-        await alertModal('下注無效', '請輸入至少 1 的下注金額。'); 
-        p = state.players[p.id];
-        continue; 
-      }
-      const bal = cur === 'cash' ? p.cash : p.points;
-      const curName = cur === 'cash' ? '現金' : '點數';
-      if (bet > bal) { 
-        await alertModal('餘額不足', `您的${curName}餘額不足（目前 ${cur === 'cash' ? '$' + fmt(p.cash) : p.points + ' PP'}）。`); 
-        p = state.players[p.id];
-        continue; 
-      }
-      
-      // Lock them in
-      state.casinoLive.betCurrency = cur;
-      state.casinoLive.betAmount = bet;
-      state.casinoLive.maxRounds = maxRounds;
-    } else {
-      cur = state.casinoLive.betCurrency;
-      bet = state.casinoLive.betAmount;
-      maxRounds = state.casinoLive.maxRounds;
-      
-      // Make sure player still has enough money
-      const bal = cur === 'cash' ? p.cash : p.points;
-      const curName = cur === 'cash' ? '現金' : '點數';
-      if (bet > bal) { 
-        await alertModal('餘額不足', `您的${curName}已不足以支付設定的下注金額（需要 ${cur === 'cash' ? '$' + fmt(bet) : bet + ' PP'}，目前 ${cur === 'cash' ? '$' + fmt(p.cash) : p.points + ' PP'}）。`); 
-        p = state.players[p.id];
-        break; 
-      }
-    }
-
+    const cur = ($('casinoCurrency') && $('casinoCurrency').value) || 'cash';
     const curName = cur === 'cash' ? '現金' : '點數';
+    const bal = cur === 'cash' ? p.cash : p.points;
+    let bet = parseInt($('casinoBet') ? $('casinoBet').value : '0') || 0;
+    if (bet < 1) { await alertModal('下注無效', '請輸入至少 1 的下注金額。'); continue; }
+    if (bet > bal) { await alertModal('餘額不足', `您的${curName}餘額不足（目前 ${cur === 'cash' ? '$' + fmt(p.cash) : p.points + ' PP'}）。`); continue; }
+
     if (cur === 'cash') p.cash -= bet; else p.points -= bet;
 
     const second = dealCard();
@@ -2301,7 +2194,6 @@ async function runCasino(p) {
     renderCasinoActing();
 
     const cont = await new Promise(res => { casinoResolver = res; });
-    p = state.players[p.id];
     if (cont === 'end') break;
   }
 
@@ -2367,9 +2259,7 @@ function rentDue(payer, owner, n) {
 
 /* 變賣資產籌錢：讓玩家賣股票/提定存/平倉質押，直到湊到 target 現金或自行停止 */
 async function raiseFunds(p, target) {
-  p = state.players[p.id];
   while (p.cash < target) {
-    p = state.players[p.id];
     const hasSavings = p.savings > 0;
     const stockTickers = Object.keys(p.stocks).filter(tk => getStockQty(p, tk) > 0);
     const hasStocks = stockTickers.length > 0;
@@ -2378,7 +2268,6 @@ async function raiseFunds(p, target) {
 
     if (!hasSavings && !hasStocks && !hasPledges) {
       await alertModal('已無可變賣資產', `您已沒有定存或股票可變賣，目前現金 $${fmt(p.cash)}。`);
-      p = state.players[p.id];
       return;
     }
 
@@ -2389,7 +2278,6 @@ async function raiseFunds(p, target) {
     options.push({ label: `停止籌錢`, value: 'stop', cls: 'btn-ghost' });
 
     const choice = await showChoice('💰 變賣資產籌錢', `目標金額 <b class="text-[#f5c451]">$${fmt(target)}</b>，目前現金 $${fmt(p.cash)}，還差 <b class="text-[#f87171]">$${fmt(target - p.cash)}</b>。<br>請選擇要變賣的資產：`, options);
-    p = state.players[p.id];
     if (choice === 'stop' || choice === undefined) return;
 
     if (choice === 'withdraw') {
@@ -2406,7 +2294,6 @@ async function raiseFunds(p, target) {
       });
       buttons.push({ label: '返回', value: null, cls: 'btn-ghost' });
       const tk = await showChoice('📉 選擇要賣出的股票', '將整筆持股一次賣出變現：', buttons);
-      p = state.players[p.id];
       if (tk) {
         const s = state.stocks.find(x => x.ticker === tk);
         const qty = getStockQty(p, tk);
@@ -2440,7 +2327,6 @@ async function raiseFunds(p, target) {
 }
 
 async function onProperty(p, n) {
-  p = state.players[p.id];
   const isActing = (playMode === 'local' || (peer && p.peerId === peer.id));
   if (n.owner !== null && n.owner !== p.id && hasDeity(p, 'land') && p.deity.big) {
     const old = state.players[n.owner];
@@ -2476,17 +2362,14 @@ async function onProperty(p, n) {
         { label: '💰 變賣資產籌錢', value: true, cls: 'btn-gold' },
         { label: '放棄認購', value: false, cls: 'btn-ghost' }
       ]);
-      p = state.players[p.id];
       if (wantRaise) {
         await raiseFunds(p, cost);
-        p = state.players[p.id];
       }
     }
 
     // 籌錢後仍不足 → 放棄
     if (p.cash < cost) {
       await alertModal('資金仍不足', `現金仍不足以購買「${n.name}」（需 $${fmt(cost)}，現有 $${fmt(p.cash)}），本次放棄認購。`);
-      p = state.players[p.id];
       return;
     }
 
@@ -2500,7 +2383,6 @@ async function onProperty(p, n) {
       { label: '確認購買', value: true, cls: 'btn-gold' },
       { label: '放棄認購', value: false, cls: 'btn-ghost' }
     ]);
-    p = state.players[p.id];
 
     if (ans) {
       p.cash -= cost;
@@ -2513,17 +2395,14 @@ async function onProperty(p, n) {
         log(`👑 <b>${p.name}</b> 壟斷「${n.groupName}」整段，地租加倍！`, n.groupColor);
         state.turnActions.push(`👑 達成「${n.groupName}」路段壟斷`);
         await alertModal('👑 區域壟斷成功！', `恭喜！您已壟斷「<b>${n.groupName}</b>」的所有地產！<br>該區地租已<b>翻倍</b>。`);
-        p = state.players[p.id];
       }
     }
   } else if (n.owner === p.id) {
     if (isActing) {
       if (n.level >= 4) {
         await alertModal('自持地產', `這是您的「${n.name}」（${HOUSE_LABEL[n.level]}），已達地標上限，無法再升級。`);
-        p = state.players[p.id];
       } else if (n.lastActionRound === state.round) {
         await alertModal('自持地產', `這是您的「${n.name}」（${HOUSE_LABEL[n.level]}），本輪已升級過，無法再升級。`);
-        p = state.players[p.id];
       } else {
         const ans = await showChoice('🏠 踩到自家地產', `
           您踏上自己的「<b>${n.name}</b>」（目前 ${HOUSE_LABEL[n.level]}）。<br>
@@ -2532,7 +2411,6 @@ async function onProperty(p, n) {
           { label: `🔨 免費升級為 ${HOUSE_LABEL[n.level + 1]}`, value: true, cls: 'btn-gold' },
           { label: '維持現狀', value: false, cls: 'btn-ghost' }
         ]);
-        p = state.players[p.id];
         if (ans) {
           n.level++;
           n.lastActionRound = state.round;
@@ -2540,7 +2418,6 @@ async function onProperty(p, n) {
           state.turnActions.push(`🏠 踩到自家地產，免費升級「${n.name}」為 ${HOUSE_LABEL[n.level]}`);
           renderAll();
           await alertModal('🏠 免費升級完成', `「${n.name}」已免費升級為 <b>${HOUSE_LABEL[n.level]}</b>！`);
-          p = state.players[p.id];
         }
       }
     }
@@ -2575,7 +2452,6 @@ async function onProperty(p, n) {
 }
 
 async function onFate(p) {
-  p = state.players[p.id];
   const isHappyImmune = p.deity && p.deity.type === 'happy' && p.deity.big;
   
   const catEvents = [
@@ -2598,86 +2474,7 @@ async function onFate(p) {
     { t: 'good', msg: '收到聖誕老人的神秘禮物卡！', v: () => { const it = pick(Object.keys(ITEMS)); p.items.push(it); return `獲得道具卡：${ITEMS[it].icon} ${ITEMS[it].name}`; } },
     { t: 'bad', msg: '收到國稅局補繳所得稅通知單。', v: () => { const g = inf(900); p.cash -= g; return `扣除現金 $${fmt(g)}`; } },
     { t: 'bad', msg: '突發急性腸胃炎，自費住院醫療。', v: () => { const g = inf(800); p.cash -= g; return `扣除現金 $${fmt(g)}`; } },
-    { t: 'bad', msg: '國際大宗物資飆漲，全域通膨急劇加速！', v: () => { triggerInflation('命運：通膨急遽上升'); return `提前觸發全域通膨！`; } },
-    { t: 'good', msg: '央行宣佈採取緊縮貨幣政策以平抑物價！', v: () => { state.inflationMult = Math.max(1.0, state.inflationMult * 0.9); return `全域通膨乘數降溫 10%！目前通膨為 ×${state.inflationMult.toFixed(2)}`; } },
-    { t: 'good', msg: '政府強力調控基本民生物資價格！', v: () => { state.inflationMult = Math.max(1.0, state.inflationMult * 0.5); return `全域通膨乘數降溫 50%！目前通膨為 ×${state.inflationMult.toFixed(2)}`; } },
-    { t: 'good', msg: '獲得高鐵無限次搭乘體驗券，快速環遊世界走一圈！', v: () => {
-        const pay = inf(SALARY_BASE);
-        p.cash += pay;
-        p.points += config.gainStart;
-        let bonusAmt = 0;
-        let bonusPoints = 0;
-        MAP.nodes.forEach(nNode => {
-          if (nNode.isSpecial && nNode.owner === p.id) {
-            if (nNode.specialType === 'cash') {
-              bonusAmt += Math.round(500 * (1 + nNode.level * 0.6) * state.inflationMult);
-            } else if (nNode.specialType === 'points') {
-              bonusPoints += 15 + nNode.level * 8;
-            }
-          }
-        });
-        p.cash += bonusAmt;
-        p.points += bonusPoints;
-        let rText = `獲得起點過路工資 $${fmt(pay)} 與 ${config.gainStart} 點數`;
-        if (bonusAmt > 0 || bonusPoints > 0) {
-          rText += `，外加您的特許事業分紅計 $${fmt(bonusAmt)} 現金與 ${bonusPoints} 點數`;
-        }
-        return rText;
-      }
-    },
-    { t: 'good', msg: '幸運抽中頭等艙機票，直接前進至起點！', v: () => {
-        p.node = 0;
-        p.from = 75;
-        const pay = inf(SALARY_BASE);
-        p.cash += pay;
-        p.points += config.gainStart;
-        let bonusAmt = 0;
-        let bonusPoints = 0;
-        MAP.nodes.forEach(nNode => {
-          if (nNode.isSpecial && nNode.owner === p.id) {
-            if (nNode.specialType === 'cash') {
-              bonusAmt += Math.round(500 * (1 + nNode.level * 0.6) * state.inflationMult);
-            } else if (nNode.specialType === 'points') {
-              bonusPoints += 15 + nNode.level * 8;
-            }
-          }
-        });
-        p.cash += bonusAmt;
-        p.points += bonusPoints;
-        let rText = `傳送至起點！獲得起點工資 $${fmt(pay)} 與 ${config.gainStart} 點數`;
-        if (bonusAmt > 0 || bonusPoints > 0) {
-          rText += `，外加特許事業分紅 $${fmt(bonusAmt)} 現金與 ${bonusPoints} 點數`;
-        }
-        return rText;
-      }
-    },
-    { t: 'bad', msg: '因涉嫌違反內線交易法規，被檢調約談，直接坐牢拘留！', v: () => {
-        p.node = 26;
-        p.skip = true;
-        return `傳送至監獄/休息處，下回合暫停一次。`;
-      }
-    },
-    { t: 'good', msg: '持有的上市公司公佈獲利配息，銀行發放股票股利！', v: () => {
-        let totalStockVal = 0;
-        Object.keys(p.stocks || {}).forEach(ticker => {
-          const qty = getStockQty(p, ticker);
-          const s = state.stocks.find(x => x.ticker === ticker);
-          if (s && qty > 0) {
-            totalStockVal += qty * s.price;
-          }
-        });
-        const div = Math.round(totalStockVal * 0.05);
-        p.cash += div;
-        return `持股總市值 $${fmt(totalStockVal)}，配發 5% 現金股利計 $${fmt(div)}`;
-      }
-    },
-    { t: 'bad', msg: '政府實施都市更新與安全檢修條例，需繳納房屋修繕費！', v: () => {
-        const val = landAsset(p);
-        const cost = Math.round(val * 0.1);
-        p.cash -= cost;
-        return `您的名下房地產總估值為 $${fmt(val)}，需繳納 10% 房屋修繕稅費計 $${fmt(cost)}`;
-      }
-    }
+    { t: 'bad', msg: '國際大宗物資飆漲，全域通膨急劇加速！', v: () => { triggerInflation('命運：通膨急遽上升'); return `提前觸發全域通膨！`; } }
   ];
   
   let card;
@@ -2703,7 +2500,6 @@ async function onFate(p) {
   }
   
   const res = card.v();
-  p = state.players[p.id];
   log(`🃏 <b>${p.name}</b> 抽到命運卡：${card.msg} -> ${res}`, '#a78bfa');
   state.turnActions.push(`🃏 抽到命運卡：${card.msg} -> ${res}`);
   await alertModal('🃏 命運抽卡', `
@@ -2711,11 +2507,7 @@ async function onFate(p) {
     <div class="mt-2 text-md font-bold text-[#ffe08a]">「${card.msg}」</div>
     <div class="mt-1 text-sm text-[#e6edf7]">${res}</div>
   `);
-  p = state.players[p.id];
-  if (p.cash < 0) {
-    await settleNegative(p);
-    p = state.players[p.id];
-  }
+  if (p.cash < 0) await settleNegative(p);
 }
 
 async function onNews() {
@@ -2814,9 +2606,11 @@ async function endTurn() {
     cp.diceCountTurns--;
     if (cp.diceCountTurns <= 0) {
       const oldCount = cp.diceCount;
-      cp.diceCount = 1;
+      const baseDice = (config.startDice || 1); // 恢復為初始載具的骰子數
+      cp.diceCount = baseDice;
       cp.diceCountTurns = 0;
-      log(`${oldCount === 2 ? '🏍️' : '🏎️'} <b>${cp.name}</b> 的${oldCount === 2 ? '機車' : '汽車'}效果已結束，恢復單骰模式。`, '#8a98b3');
+      const baseLabel = baseDice === 3 ? '汽車（三骰）' : (baseDice === 2 ? '機車（雙骰）' : '單骰');
+      log(`${oldCount === 2 ? '🏍️' : '🏎️'} <b>${cp.name}</b> 的${oldCount === 2 ? '機車' : '汽車'}卡效果已結束，恢復為${baseLabel}模式。`, '#8a98b3');
     }
   }
   
@@ -3336,12 +3130,9 @@ function tradeStock(type) {
    股票斷頭追繳與負債處理
 ========================================================= */
 async function checkMarginCall(p) {
-  p = state.players[p.id];
   const tickers = Object.keys(p.pledged);
   for (const tk of tickers) {
-    p = state.players[p.id];
     const pledged = p.pledged[tk];
-    if (!pledged) continue;
     const s = state.stocks.find(x => x.ticker === tk);
     if (!s) continue;
     
@@ -3362,19 +3153,13 @@ async function checkMarginCall(p) {
         · 償還貸款：-$${fmt(pledged.loan)}<br>
         · 清算後${remainder >= 0 ? `退回您的現金：<span class="text-[#34d399] font-bold">+$${fmt(remainder)}</span>` : `您需補足的差額：<span class="text-[#f87171] font-bold">-$${fmt(Math.abs(remainder))}</span>`}
       `);
-      p = state.players[p.id];
-      if (p.cash < 0) {
-        await settleNegative(p);
-        p = state.players[p.id];
-      }
+      if (p.cash < 0) await settleNegative(p);
     }
   }
 }
 
 async function settleNegative(p) {
-  p = state.players[p.id];
   while (p.cash < 0 && p.alive) {
-    p = state.players[p.id];
     const hasSavings = p.savings > 0;
     const hasStocks = Object.keys(p.stocks).some(tk => getStockQty(p, tk) > 0);
     const hasPledges = Object.keys(p.pledged).length > 0;
@@ -3384,7 +3169,6 @@ async function settleNegative(p) {
       log(`💀 <b>${p.name}</b> 資不抵債且無任何餘額資產，宣告破產！`, '#f87171');
       state.turnActions.push(`💀 資不抵債，宣告破產退出`);
       await alertModal('💀 破產宣告', `<b>${p.name}</b> 無法清償債務，正式破產退出遊戲！`);
-      p = state.players[p.id];
       declareBankruptcy(p);
       return;
     }
@@ -3402,7 +3186,6 @@ async function settleNegative(p) {
       `您現金透支了：<span class="mono text-[#f87171] font-bold">-$${fmt(Math.abs(p.cash))}</span>。<br>請變賣以下資產以償還赤字本息：`,
       options
     );
-    p = state.players[p.id];
     
     if (choice === 'bankruptcy') {
       log(`💀 <b>${p.name}</b> 主動申報破產，退出戰局。`, '#f87171');
@@ -4690,15 +4473,7 @@ function joinOnlineRoom() {
         if (state && data.state && data.state.inflationCount > state.inflationCount) {
           showInflationAlert();
         }
-        const myIdx = state ? state.players.findIndex(pl => peer && pl.peerId === peer.id) : -1;
-        const isMyTurn = (state && myIdx !== -1 && state.current === myIdx);
-        if (isMyTurn && data.state.current === myIdx) {
-          if (state.casinoLive && data.state.casinoLive) {
-            state.casinoLive = data.state.casinoLive;
-          }
-        } else {
-          state = data.state;
-        }
+        state = data.state;
         applyMapStateToNodes();
         renderAll();
         checkTurnTransition();
@@ -5238,15 +5013,7 @@ function autoReconnectBtn() {
           if (state && data.state && data.state.inflationCount > state.inflationCount) {
             showInflationAlert();
           }
-          const myIdx = state ? state.players.findIndex(pl => peer && pl.peerId === peer.id) : -1;
-          const isMyTurn = (state && myIdx !== -1 && state.current === myIdx);
-          if (isMyTurn && data.state.current === myIdx) {
-            if (state.casinoLive && data.state.casinoLive) {
-              state.casinoLive = data.state.casinoLive;
-            }
-          } else {
-            state = data.state;
-          }
+          state = data.state;
           applyMapStateToNodes();
           renderAll();
           checkTurnTransition();
@@ -5447,16 +5214,14 @@ async function handleOfflineActivePlayer(idx) {
   stopTimer();
   closePanels();
   
-  let p = state.players[idx];
+  const p = state.players[idx];
   log(`🤖 [系統] 正在為中途斷線的玩家 <b>${p.name}</b> 託管並結束回合...`, '#8a98b3');
   
   if (!rolledThisTurn && !busy) {
     await doRoll();
-    p = state.players[idx];
     if (p.cash < 0) await settleNegative(p);
     setTimeout(endTurn, 1000);
   } else if (rolledThisTurn && !busy) {
-    p = state.players[idx];
     if (p.cash < 0) await settleNegative(p);
     setTimeout(endTurn, 1000);
   }
