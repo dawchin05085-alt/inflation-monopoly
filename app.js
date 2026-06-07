@@ -2032,43 +2032,70 @@ function renderCasinoActing() {
   const cardsBlock = `<div class="flex justify-center gap-4 my-4">${cardHTML(cl.first, cl.phase === 'reveal')}${cl.phase === 'reveal' ? cardHTML(cl.second) : ''}</div>`;
   let controls;
   if (cl.phase === 'bet') {
-    const defaultBetVal = Math.min(1000, Math.max(1, p.cash));
-    controls = `
-      <div class="mb-4">
-        <div class="text-[#8a98b3] text-xs font-bold mb-1.5 flex justify-between">
-          <span>💰 下注種類與金額：</span>
-          <span id="maxBetInfo" class="text-[#f5c451]">已下注 ${cl.rounds} / 10 次（最多 10 次）</span>
+    if (cl.rounds === 0) {
+      const defaultBetVal = Math.min(1000, Math.max(1, p.cash));
+      controls = `
+        <div class="mb-4 space-y-3">
+          <div>
+            <div class="text-[#8a98b3] text-xs font-bold mb-1.5">🔁 設定本次賭博局數：</div>
+            <input id="casinoMaxRounds" type="number" min="1" max="100" value="10" class="seg text-sm font-bold mono w-full" placeholder="請輸入局數">
+          </div>
+          <div>
+            <div class="text-[#8a98b3] text-xs font-bold mb-1.5 flex justify-between">
+              <span>💰 下注種類與每局金額：</span>
+              <span class="text-[#f5c451]">首局設定後將鎖定沿用</span>
+            </div>
+            <div class="flex gap-2">
+              <select id="casinoCurrency" class="seg text-sm font-bold" style="width: 120px;" onchange="(function(){
+                var b=document.getElementById('casinoBet'); 
+                if(b) b.value = this.value==='cash'? Math.min(1000, ${p.cash}) : Math.min(10, ${p.points});
+              }).call(this)">
+                <option value="cash">💵 現金</option>
+                <option value="points">🔵 點數</option>
+              </select>
+              <input id="casinoBet" type="number" min="1" value="${defaultBetVal}" class="seg text-sm font-bold mono" style="flex:1" placeholder="請輸入單局賭金">
+              <button class="btn btn-red px-4 text-xs font-bold" onclick="casinoQuickBet('all')">ALL IN</button>
+            </div>
+            <div class="flex gap-2 mt-2">
+              <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(100)">+100</button>
+              <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(1000)">+1,000</button>
+              <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(10000)">+10,000</button>
+              <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(10)">+10 PP</button>
+              <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(50)">+50 PP</button>
+            </div>
+          </div>
         </div>
         <div class="flex gap-2">
-          <select id="casinoCurrency" class="seg text-sm font-bold" style="width: 120px;" onchange="(function(){
-            var b=document.getElementById('casinoBet'); 
-            if(b) b.value = this.value==='cash'? Math.min(1000, ${p.cash}) : Math.min(10, ${p.points});
-          }).call(this)">
-            <option value="cash">💵 現金</option>
-            <option value="points">🔵 點數</option>
-          </select>
-          <input id="casinoBet" type="number" min="1" value="${defaultBetVal}" class="seg text-sm font-bold mono" style="flex:1" placeholder="請輸入金額">
-          <button class="btn btn-red px-4 text-xs font-bold" onclick="casinoQuickBet('all')">ALL IN</button>
+          <button class="btn btn-gold py-2.5 text-sm" style="flex:1" onclick="casinoAct('high')">🔼 更大</button>
+          <button class="btn btn-gold py-2.5 text-sm" style="flex:1" onclick="casinoAct('low')">🔽 更小</button>
+          <button class="btn btn-ghost py-2.5 px-4 text-sm" onclick="casinoAct('end')">🚪 離開賭場</button>
+        </div>`;
+    } else {
+      controls = `
+        <div class="mb-4 p-3 border border-[#26314a]/60 rounded bg-[#121826]/40 text-xs text-[#8a98b3] space-y-1.5">
+          <div class="flex justify-between">
+            <span>下注金額 (已鎖定)：</span>
+            <span class="font-bold text-white mono">${cl.betCurrency === 'cash' ? '$' + fmt(cl.betAmount) : cl.betAmount + ' PP'} (${cl.betCurrency === 'cash' ? '現金' : '點數'})</span>
+          </div>
+          <div class="flex justify-between">
+            <span>玩牌進度：</span>
+            <span class="font-bold text-[#f5c451] mono">第 ${cl.rounds + 1} / ${cl.maxRounds} 局</span>
+          </div>
         </div>
-        <div class="flex gap-2 mt-2">
-          <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(100)">+100</button>
-          <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(1000)">+1,000</button>
-          <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(10000)">+10,000</button>
-          <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(10)">+10 PP</button>
-          <button class="btn btn-ghost py-1 px-3 text-xs" onclick="casinoQuickBet(50)">+50 PP</button>
-        </div>
-      </div>
-      <div class="flex gap-2">
-        <button class="btn btn-gold py-2.5 text-sm" style="flex:1" onclick="casinoAct('high')">🔼 更大</button>
-        <button class="btn btn-gold py-2.5 text-sm" style="flex:1" onclick="casinoAct('low')">🔽 更小</button>
-        <button class="btn btn-ghost py-2.5 px-4 text-sm" onclick="casinoAct('end')">🚪 結束賭局</button>
-      </div>`;
+        <div class="flex gap-2">
+          <button class="btn btn-gold py-2.5 text-sm" style="flex:1" onclick="casinoAct('high')">🔼 更大</button>
+          <button class="btn btn-gold py-2.5 text-sm" style="flex:1" onclick="casinoAct('low')">🔽 更小</button>
+          <button class="btn btn-ghost py-2.5 px-4 text-sm" onclick="casinoAct('end')">🚪 結束賭局</button>
+        </div>`;
+    }
   } else {
-    const limitReached = cl.rounds >= 10;
+    const bal = cl.betCurrency === 'cash' ? p.cash : p.points;
+    const canContinue = bal >= cl.betAmount;
+    const limitReached = cl.rounds >= cl.maxRounds;
     controls = `
       <div class="flex gap-2">
-        <button class="btn btn-gold py-2.5 text-sm" style="flex:1" ${limitReached ? 'disabled' : ''} onclick="casinoAct('again')">
-          ${limitReached ? '🚫 已達 10 局上限' : '🔁 再賭一局'}
+        <button class="btn btn-gold py-2.5 text-sm" style="flex:1" ${(!canContinue || limitReached) ? 'disabled' : ''} onclick="casinoAct('again')">
+          ${limitReached ? `🚫 已達 ${cl.maxRounds} 局上限` : (!canContinue ? '🚫 餘額不足以續賭' : '🔁 再賭一局')}
         </button>
         <button class="btn btn-ghost py-2.5 text-sm" style="flex:1" onclick="casinoAct('end')">🚪 結束賭局</button>
       </div>`;
@@ -2081,7 +2108,7 @@ function renderCasinoActing() {
     <div class="flex justify-center gap-4 text-xs mb-3">
       <span class="text-[#8a98b3]">💵 現金：<b class="text-[#f5c451] mono">$${fmt(p.cash)}</b></span>
       <span class="text-[#8a98b3]">🔵 點數：<b class="text-[#60a5fa] mono">${p.points} PP</b></span>
-      <span class="text-[#8a98b3]">已玩 <b class="text-white">${cl.rounds} / 10</b> 局</span>
+      <span class="text-[#8a98b3]">已玩 <b class="text-white">${cl.rounds} / ${cl.maxRounds || 10}</b> 局</span>
     </div>
     ${cardsBlock}
     ${resultBlock}
@@ -2102,15 +2129,24 @@ function renderCasinoSpectator() {
     resultBlock = `<div class="text-center font-bold mb-3 text-sm" style="color:${color}">${txt}</div>`;
   }
   const cardsBlock = `<div class="flex justify-center gap-4 my-4">${cardHTML(cl.first, cl.phase === 'reveal')}${cl.phase === 'reveal' ? cardHTML(cl.second) : ''}</div>`;
+  let betInfoBlock = '';
+  if (cl.rounds > 0 && cl.betAmount > 0) {
+    betInfoBlock = `
+      <div class="text-center text-xs text-[#8a98b3] mb-2">
+        下注金額：<b class="text-white mono">${cl.betCurrency === 'cash' ? '$' + fmt(cl.betAmount) : cl.betAmount + ' PP'}</b> (${cl.betCurrency === 'cash' ? '現金' : '點數'})
+      </div>
+    `;
+  }
   $('casinoBody').innerHTML = `
     <div class="text-center mb-2">
       <div class="display text-xl font-bold text-[#d97706]">🎰 賭場觀戰中</div>
-      <div class="text-sm mt-1 font-bold" style="color:${actor ? actor.color : '#fff'}">${actor ? actor.icon + ' ' + actor.name : ''} 正在賭場博弈…</div>
+      <div class="text-sm mt-1 font-bold mb-1" style="color:${actor ? actor.color : '#fff'}">${actor ? actor.icon + ' ' + actor.name : ''} 正在賭場博弈…</div>
     </div>
+    ${betInfoBlock}
     <div class="flex justify-center gap-4 text-xs mb-1">
       <span class="text-[#8a98b3]">💵 現金：<b class="text-[#f5c451] mono">$${fmt(cl.cash)}</b></span>
       <span class="text-[#8a98b3]">🔵 點數：<b class="text-[#60a5fa] mono">${cl.points} PP</b></span>
-      <span class="text-[#8a98b3]">已玩 <b class="text-white">${cl.rounds}</b> 局</span>
+      <span class="text-[#8a98b3]">已玩 <b class="text-white">${cl.rounds} / ${cl.maxRounds || 10}</b> 局</span>
     </div>
     ${cardsBlock}
     ${resultBlock}
@@ -2130,14 +2166,30 @@ function updateCasinoView() {
 }
 
 async function runCasino(p) {
+  p = state.players[p.id];
   log(`🎰 <b>${p.name}</b> 進入拉斯維加斯賭場！`, '#d97706');
   state.turnActions.push(`🎰 進入賭場`);
   stopTimer();
   casinoActorBusy = true;
-  state.casinoLive = { pid: p.id, name: p.name, color: p.color, cash: p.cash, points: p.points, first: null, second: null, phase: 'bet', lastResult: null, rounds: 0 };
+  state.casinoLive = { 
+    pid: p.id, 
+    name: p.name, 
+    color: p.color, 
+    cash: p.cash, 
+    points: p.points, 
+    first: null, 
+    second: null, 
+    phase: 'bet', 
+    lastResult: null, 
+    rounds: 0,
+    maxRounds: 10,
+    betAmount: 0,
+    betCurrency: 'cash'
+  };
 
   while (true) {
-    if (state.casinoLive.rounds >= 10) {
+    p = state.players[p.id];
+    if (state.casinoLive.rounds >= state.casinoLive.maxRounds) {
       break;
     }
     const first = dealCard();
@@ -2150,15 +2202,52 @@ async function runCasino(p) {
     renderCasinoActing();
 
     const action = await new Promise(res => { casinoResolver = res; });
+    p = state.players[p.id];
     if (action === 'end') break;
 
-    const cur = ($('casinoCurrency') && $('casinoCurrency').value) || 'cash';
-    const curName = cur === 'cash' ? '現金' : '點數';
-    const bal = cur === 'cash' ? p.cash : p.points;
-    let bet = parseInt($('casinoBet') ? $('casinoBet').value : '0') || 0;
-    if (bet < 1) { await alertModal('下注無效', '請輸入至少 1 的下注金額。'); continue; }
-    if (bet > bal) { await alertModal('餘額不足', `您的${curName}餘額不足（目前 ${cur === 'cash' ? '$' + fmt(p.cash) : p.points + ' PP'}）。`); continue; }
+    let cur, bet, maxRounds;
+    if (state.casinoLive.rounds === 0) {
+      cur = ($('casinoCurrency') && $('casinoCurrency').value) || 'cash';
+      bet = parseInt($('casinoBet') ? $('casinoBet').value : '0') || 0;
+      maxRounds = parseInt($('casinoMaxRounds') ? $('casinoMaxRounds').value : '10') || 10;
+      if (maxRounds < 1) { 
+        await alertModal('設定無效', '請輸入至少 1 次的玩牌局數。'); 
+        p = state.players[p.id];
+        continue; 
+      }
+      if (bet < 1) { 
+        await alertModal('下注無效', '請輸入至少 1 的下注金額。'); 
+        p = state.players[p.id];
+        continue; 
+      }
+      const bal = cur === 'cash' ? p.cash : p.points;
+      const curName = cur === 'cash' ? '現金' : '點數';
+      if (bet > bal) { 
+        await alertModal('餘額不足', `您的${curName}餘額不足（目前 ${cur === 'cash' ? '$' + fmt(p.cash) : p.points + ' PP'}）。`); 
+        p = state.players[p.id];
+        continue; 
+      }
+      
+      // Lock them in
+      state.casinoLive.betCurrency = cur;
+      state.casinoLive.betAmount = bet;
+      state.casinoLive.maxRounds = maxRounds;
+    } else {
+      cur = state.casinoLive.betCurrency;
+      bet = state.casinoLive.betAmount;
+      maxRounds = state.casinoLive.maxRounds;
+      
+      // Make sure player still has enough money
+      const bal = cur === 'cash' ? p.cash : p.points;
+      const curName = cur === 'cash' ? '現金' : '點數';
+      if (bet > bal) { 
+        await alertModal('餘額不足', `您的${curName}已不足以支付設定的下注金額（需要 ${cur === 'cash' ? '$' + fmt(bet) : bet + ' PP'}，目前 ${cur === 'cash' ? '$' + fmt(p.cash) : p.points + ' PP'}）。`); 
+        p = state.players[p.id];
+        break; 
+      }
+    }
 
+    const curName = cur === 'cash' ? '現金' : '點數';
     if (cur === 'cash') p.cash -= bet; else p.points -= bet;
 
     const second = dealCard();
@@ -2194,6 +2283,7 @@ async function runCasino(p) {
     renderCasinoActing();
 
     const cont = await new Promise(res => { casinoResolver = res; });
+    p = state.players[p.id];
     if (cont === 'end') break;
   }
 
@@ -4471,7 +4561,15 @@ function joinOnlineRoom() {
         if (state && data.state && data.state.inflationCount > state.inflationCount) {
           showInflationAlert();
         }
-        state = data.state;
+        const myIdx = state ? state.players.findIndex(pl => peer && pl.peerId === peer.id) : -1;
+        const isMyTurn = (state && myIdx !== -1 && state.current === myIdx);
+        if (isMyTurn && data.state.current === myIdx) {
+          if (state.casinoLive && data.state.casinoLive) {
+            state.casinoLive = data.state.casinoLive;
+          }
+        } else {
+          state = data.state;
+        }
         applyMapStateToNodes();
         renderAll();
         checkTurnTransition();
@@ -5011,7 +5109,15 @@ function autoReconnectBtn() {
           if (state && data.state && data.state.inflationCount > state.inflationCount) {
             showInflationAlert();
           }
-          state = data.state;
+          const myIdx = state ? state.players.findIndex(pl => peer && pl.peerId === peer.id) : -1;
+          const isMyTurn = (state && myIdx !== -1 && state.current === myIdx);
+          if (isMyTurn && data.state.current === myIdx) {
+            if (state.casinoLive && data.state.casinoLive) {
+              state.casinoLive = data.state.casinoLive;
+            }
+          } else {
+            state = data.state;
+          }
           applyMapStateToNodes();
           renderAll();
           checkTurnTransition();
