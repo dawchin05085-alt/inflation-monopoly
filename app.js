@@ -515,6 +515,31 @@ function nodeById(id) {
 }
 
 /* =========================================================
+   地產動態狀態 ⇄ state 同步
+   地產的 owner/level/lastActionRound 原本只存在全域 MAP，不在 state 內，
+   導致線上連線與存檔都不會帶到地產所有權。以下將這些動態欄位寫入 state，
+   並可於收到 state / 載入存檔時還原回 MAP，確保各端 netWorth 與地租一致。
+========================================================= */
+function snapshotMapToState() {
+  if (!state || !MAP.nodes.length) return;
+  state.mapNodes = MAP.nodes
+    .filter(n => n.type === 'property')
+    .map(n => ({ id: n.id, owner: n.owner, level: n.level, lastActionRound: n.lastActionRound || 0 }));
+}
+
+function applyMapStateToNodes() {
+  if (!state || !state.mapNodes || !MAP.nodes.length) return;
+  state.mapNodes.forEach(rec => {
+    const n = nodeById(rec.id);
+    if (n) {
+      n.owner = rec.owner;
+      n.level = rec.level;
+      n.lastActionRound = rec.lastActionRound || 0;
+    }
+  });
+}
+
+/* =========================================================
    自動尋路預設方向
 ========================================================= */
 // 取得「不回頭」的前進選項（排除剛剛來的那一格）
@@ -598,6 +623,8 @@ function startGame() {
     $('game').style.display = 'block';
     $('game').classList.remove('hidden');
     
+    buildMap();
+    applyMapStateToNodes();
     buildMapDOM();
     renderAll();
     recenter(true);
@@ -926,7 +953,9 @@ function updateMap() {
       if (n.type === 'property') {
         if (n.owner !== null) {
           const owner = state.players[n.owner];
-          t = `【${owner.name.substring(0, 4)}】${HOUSE_LABEL[n.level]}`;
+          const sealed = state.seals && state.seals.some(s => s.group === n.group);
+          const rentTxt = sealed ? '🔏查封·免費' : `💸$${fmt(effectiveRent(n))}`;
+          t = `【${owner.name.substring(0, 4)}】${HOUSE_LABEL[n.level]} · 過路費 ${rentTxt}`;
           if (n.isSpecial) {
             const bonusDesc = n.specialType === 'cash'
               ? `$${fmt(Math.round(500 * (1 + n.level * 0.6) * state.inflationMult))}`
@@ -1140,13 +1169,20 @@ function flashFocusNode(nodeId) {
 /* =========================================================
    面板管理
 ========================================================= */
-function netWorth(p) {
-  let w = p.cash + p.savings;
+/* 土地資產：所持有地產的市值（含房屋加成、隨通膨計價） */
+function landAsset(p) {
+  let w = 0;
   MAP.nodes.forEach(n => {
     if (n.type === 'property' && n.owner === p.id) {
       w += inf(n.basePrice) + n.level * inf(n.basePrice) * 0.6;
     }
   });
+  return Math.round(w);
+}
+
+/* 股票資產：持股市值 + 質押部位淨值（股票市值 − 質押貸款） */
+function stockAsset(p) {
+  let w = 0;
   Object.keys(p.stocks).forEach(tk => {
     w += getStockQty(p, tk) * stockPrice(tk);
   });
@@ -1154,6 +1190,10 @@ function netWorth(p) {
     w += p.pledged[tk].shares * stockPrice(tk) - p.pledged[tk].loan;
   });
   return Math.round(w);
+}
+
+function netWorth(p) {
+  return Math.round(p.cash + p.savings + landAsset(p) + stockAsset(p));
 }
 
 function deityBadge(p) {
@@ -1309,6 +1349,7 @@ function renderAll() {
   if ($('stockPanel').style.display === 'flex') renderStock();
   if ($('buildPanel').style.display === 'flex') renderBuild();
   if ($('itemPanel').style.display === 'flex') renderItems();
+  if ($('propertyStatusPanel').style.display === 'flex') renderPropertyStatus();
 }
 
 /* =========================================================
@@ -1932,8 +1973,17 @@ function renderPropertyStatus() {
         ownerText = `<span class="px-2 py-0.5 rounded text-xs font-bold" style="background: ${owner.color}; color: #fff;">👤 ${owner.name}</span>`;
       }
       const levelText = n.level > 0 ? `<span class="text-[#f5c451] text-xs font-bold">${HOUSE_LABEL[n.level]}</span>` : '<span class="text-[#8a98b3] text-[11px]">空地</span>';
-      let rentVal = inf(n.baseRent) * HOUSE_MULT[n.level];
-      if (monopolyOwner !== null) rentVal *= 2;
+      // 已有屋主：顯示實際過路費（與地圖一致）；無主地：顯示潛在底價租金
+      let rentVal, rentLabel;
+      if (n.owner !== null) {
+        const sealed = state.seals && state.seals.some(s => s.group === n.group);
+        rentVal = effectiveRent(n);
+        rentLabel = sealed ? '過路費: 🔏查封免費' : `過路費: $${fmt(rentVal)}`;
+      } else {
+        let base = inf(n.baseRent) * HOUSE_MULT[n.level];
+        if (monopolyOwner !== null) base *= 2;
+        rentLabel = `潛在過路費: $${fmt(Math.round(base))}`;
+      }
       let specialDesc = '';
       if (n.isSpecial) {
         const bonusDesc = n.specialType === 'cash'
@@ -1946,7 +1996,7 @@ function renderPropertyStatus() {
           <div class="flex flex-col gap-0.5">
             <span class="font-bold text-white">${n.name} <span class="text-[#8a98b3] font-normal text-[10px] mono">#${n.id}</span></span>
             <span class="text-[#8a98b3] text-[10px] flex items-center gap-1.5">
-              <span>過路費: $${fmt(rentVal)}${specialDesc}</span>
+              <span>${rentLabel}${specialDesc}</span>
               <span>•</span>
               ${levelText}
             </span>
@@ -2174,6 +2224,19 @@ function isMonopoly(n) {
   return n.type === 'property' && n.group != null && groupOwner(n.group) === n.owner && n.owner !== null;
 }
 
+/* 顯示用的「實際過路費」：含通膨、房屋、壟斷、漲價/查封、屋主海嘯，但不含付款者個人神明加減
+   （供地圖卡牌與土地狀況面板顯示，確保兩處數字一致） */
+function effectiveRent(n) {
+  if (n.type !== 'property' || n.owner === null) return 0;
+  if (state.seals && state.seals.some(s => s.group === n.group)) return 0;
+  let r = inf(n.baseRent) * HOUSE_MULT[n.level];
+  if (isMonopoly(n)) r *= 2;
+  if (state.priceHikes && state.priceHikes.some(h => h.group === n.group)) r *= 2;
+  const owner = state.players[n.owner];
+  if (owner && owner.tsunamiTurns > 0) r = Math.round(r * 0.5);
+  return Math.round(r);
+}
+
 function rentDue(payer, owner, n) {
   // 查封卡效果：過路費歸零
   if (state.seals && state.seals.some(s => s.group === n.group)) return 0;
@@ -2192,7 +2255,77 @@ function rentDue(payer, owner, n) {
   return Math.round(r);
 }
 
+/* 變賣資產籌錢：讓玩家賣股票/提定存/平倉質押，直到湊到 target 現金或自行停止 */
+async function raiseFunds(p, target) {
+  while (p.cash < target) {
+    const hasSavings = p.savings > 0;
+    const stockTickers = Object.keys(p.stocks).filter(tk => getStockQty(p, tk) > 0);
+    const hasStocks = stockTickers.length > 0;
+    const pledgeTickers = Object.keys(p.pledged).filter(tk => p.pledged[tk] && p.pledged[tk].shares > 0);
+    const hasPledges = pledgeTickers.length > 0;
+
+    if (!hasSavings && !hasStocks && !hasPledges) {
+      await alertModal('已無可變賣資產', `您已沒有定存或股票可變賣，目前現金 $${fmt(p.cash)}。`);
+      return;
+    }
+
+    const options = [];
+    if (hasSavings) options.push({ label: `🏦 提領全部定存 ($${fmt(p.savings)})`, value: 'withdraw', cls: 'btn-green' });
+    if (hasStocks) options.push({ label: `📉 賣出股票變現`, value: 'sell_stock', cls: 'btn-gold' });
+    if (hasPledges) options.push({ label: `🔓 平倉質押部位`, value: 'sell_pledge', cls: 'btn-gold' });
+    options.push({ label: `停止籌錢`, value: 'stop', cls: 'btn-ghost' });
+
+    const choice = await showChoice('💰 變賣資產籌錢', `目標金額 <b class="text-[#f5c451]">$${fmt(target)}</b>，目前現金 $${fmt(p.cash)}，還差 <b class="text-[#f87171]">$${fmt(target - p.cash)}</b>。<br>請選擇要變賣的資產：`, options);
+    if (choice === 'stop' || choice === undefined) return;
+
+    if (choice === 'withdraw') {
+      const amt = p.savings;
+      p.savings = 0;
+      p.cash += amt;
+      log(`🏦 <b>${p.name}</b> 提領定存 $${fmt(amt)} 以籌措購地資金。`, '#34d399');
+      state.turnActions.push(`🏦 提領定存 $${fmt(amt)} 籌資`);
+    } else if (choice === 'sell_stock') {
+      const buttons = stockTickers.map(tk => {
+        const s = state.stocks.find(x => x.ticker === tk);
+        const qty = getStockQty(p, tk);
+        return { label: `${s ? s.name : tk} ×${qty}股（≈$${fmt(qty * stockPrice(tk))}）`, value: tk, cls: 'btn-gold' };
+      });
+      buttons.push({ label: '返回', value: null, cls: 'btn-ghost' });
+      const tk = await showChoice('📉 選擇要賣出的股票', '將整筆持股一次賣出變現：', buttons);
+      if (tk) {
+        const s = state.stocks.find(x => x.ticker === tk);
+        const qty = getStockQty(p, tk);
+        const price = stockPrice(tk);
+        const earn = qty * price;
+        const avg = getStockAvgCost(p, tk);
+        const pnl = (price - avg) * qty;
+        p.cash += earn;
+        p.turnStockPnL = (p.turnStockPnL || 0) + pnl;
+        if (config.stockLimit && s && s.availableShares !== Infinity) s.availableShares += qty;
+        delete p.stocks[tk];
+        if (!p.tradeLog) p.tradeLog = [];
+        p.tradeLog.push({ round: state.round, type: 'sell', ticker: tk, name: s ? s.name : tk, qty, price, pnl });
+        log(`📉 <b>${p.name}</b> 變賣 ${qty} 股「${s ? s.name : tk}」，變現 $${fmt(earn)}。`, '#f5c451');
+        state.turnActions.push(`📉 變賣 ${qty} 股「${s ? s.name : tk}」籌資`);
+      }
+    } else if (choice === 'sell_pledge') {
+      const tk = pledgeTickers[0];
+      const pledged = p.pledged[tk];
+      const s = state.stocks.find(x => x.ticker === tk);
+      const curValue = pledged.shares * stockPrice(tk);
+      const remainder = curValue - pledged.loan;
+      p.cash += remainder;
+      delete p.pledged[tk];
+      log(`🔓 <b>${p.name}</b> 平倉質押的「${s ? s.name : tk}」，清算進帳 $${fmt(remainder)}。`, '#a78bfa');
+      state.turnActions.push(`🔓 平倉質押「${s ? s.name : tk}」籌資`);
+    }
+    syncState();
+    renderAll();
+  }
+}
+
 async function onProperty(p, n) {
+  const isActing = (playMode === 'local' || (peer && p.peerId === peer.id));
   if (n.owner !== null && n.owner !== p.id && hasDeity(p, 'land') && p.deity.big) {
     const old = state.players[n.owner];
     n.owner = p.id;
@@ -2208,49 +2341,83 @@ async function onProperty(p, n) {
   
   if (n.owner === null) {
     if (hasDeity(p, 'poor') && p.deity.big) {
-      if (playMode === 'local' || (peer && p.peerId === peer.id)) {
+      if (isActing) {
         await alertModal('無法購地', `<b>${p.name}</b> 被大窮神附身，暫時無法購買土地。`);
       }
       return;
     }
+    if (!isActing) return; // 僅行動方處理購地決策
     const cost = buyCost(p, n.basePrice);
     const grpInfo = `<br><span style="color:${n.groupColor}; font-weight:700">路段：${n.groupName}</span>（壟斷加倍）`;
+
+    // 現金不足：先給玩家變賣資產籌錢的機會，再重新判斷
     if (p.cash < cost) {
-      if (playMode === 'local' || (peer && p.peerId === peer.id)) {
-        await alertModal('資金不足', `購買「${n.name}」需要 $${fmt(cost)} 現金，您的資金不足。`);
-      }
-      return;
-    }
-    
-    // 只有我方的回合才能彈窗做買地決定
-    if (playMode === 'local' || (peer && p.peerId === peer.id)) {
-      const ans = await showChoice('土地認購', `
-        「<b>${n.name}</b>」目前為無主地。<br>
-        購買價格：<span class="mono text-[#f5c451] font-bold">$${fmt(cost)}</span>
-        ${hasDeity(p, 'fortune') ? '<br><span class="text-[#fbbf24] font-semibold">（財神特惠已折抵）</span>' : ''}
-        ${grpInfo}<br>
-        您目前現金：$${fmt(p.cash)}
+      const wantRaise = await showChoice('資金不足', `
+        購買「<b>${n.name}</b>」需要 <span class="mono text-[#f5c451] font-bold">$${fmt(cost)}</span>，
+        您目前現金只有 $${fmt(p.cash)}（還差 $${fmt(cost - p.cash)}）。<br>
+        是否先變賣股票／定存等資產來籌錢？
       `, [
-        { label: '確認購買', value: true, cls: 'btn-gold' },
+        { label: '💰 變賣資產籌錢', value: true, cls: 'btn-gold' },
         { label: '放棄認購', value: false, cls: 'btn-ghost' }
       ]);
-      
-      if (ans) {
-        p.cash -= cost;
-        n.owner = p.id;
-        n.lastActionRound = state.round; 
-        log(`🏙 <b>${p.name}</b> 買下了「${n.name}」，花費現金 $${fmt(cost)}。`, p.color);
-        state.turnActions.push(`🏙️ 買下地產「${n.name}」（花費 $${fmt(cost)}）`);
-        if (isMonopoly(n)) {
-          log(`👑 <b>${p.name}</b> 壟斷「${n.groupName}」整段，地租加倍！`, n.groupColor);
-          state.turnActions.push(`👑 達成「${n.groupName}」路段壟斷`);
-          await alertModal('👑 區域壟斷成功！', `恭喜！您已壟斷「<b>${n.groupName}</b>」的所有地產！<br>該區地租已<b>翻倍</b>。`);
-        }
+      if (wantRaise) {
+        await raiseFunds(p, cost);
+      }
+    }
+
+    // 籌錢後仍不足 → 放棄
+    if (p.cash < cost) {
+      await alertModal('資金仍不足', `現金仍不足以購買「${n.name}」（需 $${fmt(cost)}，現有 $${fmt(p.cash)}），本次放棄認購。`);
+      return;
+    }
+
+    const ans = await showChoice('土地認購', `
+      「<b>${n.name}</b>」目前為無主地。<br>
+      購買價格：<span class="mono text-[#f5c451] font-bold">$${fmt(cost)}</span>
+      ${hasDeity(p, 'fortune') ? '<br><span class="text-[#fbbf24] font-semibold">（財神特惠已折抵）</span>' : ''}
+      ${grpInfo}<br>
+      您目前現金：$${fmt(p.cash)}
+    `, [
+      { label: '確認購買', value: true, cls: 'btn-gold' },
+      { label: '放棄認購', value: false, cls: 'btn-ghost' }
+    ]);
+
+    if (ans) {
+      p.cash -= cost;
+      p.turnSpent = (p.turnSpent || 0) + cost;
+      n.owner = p.id;
+      n.lastActionRound = state.round;
+      log(`🏙 <b>${p.name}</b> 買下了「${n.name}」，花費現金 $${fmt(cost)}。`, p.color);
+      state.turnActions.push(`🏙️ 買下地產「${n.name}」（花費 $${fmt(cost)}）`);
+      if (isMonopoly(n)) {
+        log(`👑 <b>${p.name}</b> 壟斷「${n.groupName}」整段，地租加倍！`, n.groupColor);
+        state.turnActions.push(`👑 達成「${n.groupName}」路段壟斷`);
+        await alertModal('👑 區域壟斷成功！', `恭喜！您已壟斷「<b>${n.groupName}</b>」的所有地產！<br>該區地租已<b>翻倍</b>。`);
       }
     }
   } else if (n.owner === p.id) {
-    if (playMode === 'local' || (peer && p.peerId === peer.id)) {
-      await alertModal('自持地產', `此地產為您所持有的「${n.name}」（${HOUSE_LABEL[n.level]}）。<br>可在蓋房升級面板中升級此處。`);
+    if (isActing) {
+      if (n.level >= 4) {
+        await alertModal('自持地產', `這是您的「${n.name}」（${HOUSE_LABEL[n.level]}），已達地標上限，無法再升級。`);
+      } else if (n.lastActionRound === state.round) {
+        await alertModal('自持地產', `這是您的「${n.name}」（${HOUSE_LABEL[n.level]}），本輪已升級過，無法再升級。`);
+      } else {
+        const ans = await showChoice('🏠 踩到自家地產', `
+          您踏上自己的「<b>${n.name}</b>」（目前 ${HOUSE_LABEL[n.level]}）。<br>
+          是否<b class="text-[#34d399]">免費升級</b>一級為 <b>${HOUSE_LABEL[n.level + 1]}</b>？升級後過路費會提高。
+        `, [
+          { label: `🔨 免費升級為 ${HOUSE_LABEL[n.level + 1]}`, value: true, cls: 'btn-gold' },
+          { label: '維持現狀', value: false, cls: 'btn-ghost' }
+        ]);
+        if (ans) {
+          n.level++;
+          n.lastActionRound = state.round;
+          log(`🏠 <b>${p.name}</b> 踩到自家「${n.name}」，免費升級為【${HOUSE_LABEL[n.level]}】！`, p.color);
+          state.turnActions.push(`🏠 踩到自家地產，免費升級「${n.name}」為 ${HOUSE_LABEL[n.level]}`);
+          renderAll();
+          await alertModal('🏠 免費升級完成', `「${n.name}」已免費升級為 <b>${HOUSE_LABEL[n.level]}</b>！`);
+        }
+      }
     }
   } else {
     const owner = state.players[n.owner];
@@ -3912,6 +4079,8 @@ function renderSidebar() {
         <div class="grid grid-cols-2 gap-x-2 text-[10px] text-[#8a98b3]">
           <div>現金: <span class="mono text-white">$${fmt(p.cash)}</span></div>
           <div>點數: <span class="mono text-[#60a5fa]">${p.points} PP</span></div>
+          <div>土地資產: <span class="mono text-[#e879f9]">$${fmt(landAsset(p))}</span></div>
+          <div>股票資產: <span class="mono text-[#22d3ee]">$${fmt(stockAsset(p))}</span></div>
           <div class="col-span-2">總資產: <span class="mono text-[#f5c451] font-bold">$${fmt(netWorth(p))}</span> <span class="text-[#34d399] font-bold ml-1.5">🏆 #${rank}</span></div>
           <div class="col-span-2 mt-1 truncate">卡片: ${itemsList || '<span class="text-[9px] text-[#55637d]">無卡片</span>'}</div>
         </div>
@@ -4119,6 +4288,7 @@ function hostOnlineRoom() {
           showInflationAlert();
         }
         state = data.state;
+        applyMapStateToNodes();
         broadcastData({
           type: 'STATE_SYNC',
           state
@@ -4267,6 +4437,7 @@ function joinOnlineRoom() {
         gameEnded = false;
         
         buildMap();
+        applyMapStateToNodes();
         
         // 紀錄房客 Session
         const myIdx = state.players.findIndex(p => peer && p.peerId === peer.id);
@@ -4299,6 +4470,7 @@ function joinOnlineRoom() {
           showInflationAlert();
         }
         state = data.state;
+        applyMapStateToNodes();
         renderAll();
         checkTurnTransition();
       }
@@ -4308,6 +4480,7 @@ function joinOnlineRoom() {
         gameEnded = false;
         
         buildMap();
+        applyMapStateToNodes();
         $('setupScreen').style.display = 'none';
         $('game').style.display = 'block';
         $('game').classList.remove('hidden');
@@ -4354,6 +4527,8 @@ window.joinOnlineRoom = joinOnlineRoom;
 
 /* 各自行動後，同步最新 state 物件給全場 */
 function syncState() {
+  // 先把地產動態狀態寫入 state，使廣播與存檔都包含地產所有權
+  snapshotMapToState();
   // 自動存檔到本地快取
   if (state) {
     localStorage.setItem('dc_monopoly_autosave', JSON.stringify({
@@ -4464,6 +4639,7 @@ let isLoadedGame = false;
 // 儲存至本地瀏覽器槽位
 function saveGameToLocalSlot(slot) {
   if (!state) return;
+  snapshotMapToState();
   try {
     const saveData = {
       timestamp: Date.now(),
@@ -4640,6 +4816,7 @@ window.updateSaveSlotsUI = updateSaveSlotsUI;
 // 下載 JSON 備份檔案
 function exportGameToJson() {
   if (!state) return;
+  snapshotMapToState();
   try {
     const saveData = {
       timestamp: Date.now(),
@@ -4812,6 +4989,7 @@ function autoReconnectBtn() {
           gameEnded = false;
           
           buildMap();
+          applyMapStateToNodes();
           $('setupScreen').style.display = 'none';
           $('game').style.display = 'block';
           $('game').classList.remove('hidden');
@@ -4831,6 +5009,7 @@ function autoReconnectBtn() {
             showInflationAlert();
           }
           state = data.state;
+          applyMapStateToNodes();
           renderAll();
           checkTurnTransition();
         }
@@ -4840,6 +5019,7 @@ function autoReconnectBtn() {
           gameEnded = false;
           
           buildMap();
+          applyMapStateToNodes();
           $('setupScreen').style.display = 'none';
           $('game').style.display = 'block';
           $('game').classList.remove('hidden');
@@ -4910,6 +5090,7 @@ function autoRestoreHostSession(session) {
       $('game').classList.remove('hidden');
       
       buildMap();
+      applyMapStateToNodes();
       buildMapDOM();
       
       state.players.forEach((p, idx) => {
@@ -4985,6 +5166,7 @@ function autoRestoreHostSession(session) {
             showInflationAlert();
           }
           state = data.state;
+          applyMapStateToNodes();
           broadcastData({
             type: 'STATE_SYNC',
             state
